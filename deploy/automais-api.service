@@ -2,8 +2,9 @@
 Description=Automais.io API Service
 After=network.target
 
+#   NÃO USAR TYPE NOTIFY!!!!
 [Service]
-Type=notify
+Type=simple
 User=root
 WorkingDirectory=/root/automais.io/server.io
 ExecStart=/usr/bin/dotnet /root/automais.io/server.io/Automais.Api.dll
@@ -16,9 +17,6 @@ SyslogIdentifier=automais-api
 TimeoutStartSec=300
 TimeoutStopSec=60
 TimeoutAbortSec=30
-
-# Aguardar notificação systemd da aplicação
-NotifyAccess=all
 
 # Variáveis de ambiente - IMPORTANTE: cada variável em uma linha separada
 Environment="ASPNETCORE_ENVIRONMENT=Production"

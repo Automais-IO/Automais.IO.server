@@ -249,6 +249,39 @@ public class TenantUserService : ITenantUserService
         }
     }
 
+    public async Task ForgotPasswordAsync(string email, CancellationToken cancellationToken = default)
+    {
+        var user = await _userRepository.GetByEmailAsync(email, cancellationToken);
+        if (user == null)
+        {
+            // Não revelar se o email existe ou não (segurança)
+            return;
+        }
+
+        // Verificar se o usuário está ativo
+        if (user.Status != TenantUserStatus.Active && user.Status != TenantUserStatus.Invited)
+        {
+            return;
+        }
+
+        // Gerar nova senha temporária
+        var temporaryPassword = GenerateTemporaryPassword();
+        var passwordHash = HashPassword(temporaryPassword);
+
+        user.PasswordHash = passwordHash;
+        user.TemporaryPassword = temporaryPassword;
+        user.TemporaryPasswordExpiresAt = DateTime.UtcNow.AddHours(12);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.UpdateAsync(user, cancellationToken);
+
+        // Enviar email com nova senha
+        if (_emailService != null)
+        {
+            await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name, temporaryPassword, cancellationToken);
+        }
+    }
+
     private static string GenerateTemporaryPassword()
     {
         const string uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

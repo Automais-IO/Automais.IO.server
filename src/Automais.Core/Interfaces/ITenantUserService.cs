@@ -11,6 +11,7 @@ public interface ITenantUserService
     Task<TenantUserDto> UpdateNetworksAsync(Guid id, UpdateUserNetworksDto dto, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task ResetPasswordAsync(Guid id, CancellationToken cancellationToken = default);
+    Task ForgotPasswordAsync(string email, CancellationToken cancellationToken = default);
 }
 
 

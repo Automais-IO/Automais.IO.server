@@ -2,6 +2,7 @@ using Automais.Core.DTOs;
 using Automais.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using Automais.Api.Extensions;
 
 namespace Automais.Api.Controllers;
 
@@ -11,13 +12,16 @@ namespace Automais.Api.Controllers;
 public class RoutersController : ControllerBase
 {
     private readonly IRouterService _routerService;
+    private readonly IAuthService _authService;
     private readonly ILogger<RoutersController> _logger;
 
     public RoutersController(
         IRouterService routerService,
+        IAuthService authService,
         ILogger<RoutersController> logger)
     {
         _routerService = routerService;
+        _authService = authService;
         _logger = logger;
     }
 
@@ -46,6 +50,13 @@ public class RoutersController : ControllerBase
     [HttpGet("tenants/{tenantId:guid}/routers")]
     public async Task<ActionResult<IEnumerable<RouterDto>>> GetByTenant(Guid tenantId, CancellationToken cancellationToken)
     {
+        // Validar se o usuário tem acesso a este tenant
+        var validationResult = this.ValidateTenantAccess(tenantId, _authService);
+        if (validationResult != null)
+        {
+            return validationResult;
+        }
+
         try
         {
             _logger.LogInformation("Listando routers do tenant {TenantId}", tenantId);
@@ -75,6 +86,14 @@ public class RoutersController : ControllerBase
             {
                 return NotFound(new { message = $"Router com ID {id} não encontrado" });
             }
+
+            // Validar se o router pertence ao tenant do usuário autenticado
+            var userTenantId = this.GetTenantId(_authService);
+            if (!userTenantId.HasValue || router.TenantId != userTenantId.Value)
+            {
+                return new ForbidResult();
+            }
+
             return Ok(router);
         }
         catch (Exception ex)
@@ -93,6 +112,13 @@ public class RoutersController : ControllerBase
     [HttpPost("tenants/{tenantId:guid}/routers")]
     public async Task<ActionResult<RouterDto>> Create(Guid tenantId, [FromBody] CreateRouterDto dto, CancellationToken cancellationToken)
     {
+        // Validar se o usuário tem acesso a este tenant
+        var validationResult = this.ValidateTenantAccess(tenantId, _authService);
+        if (validationResult != null)
+        {
+            return validationResult;
+        }
+
         _logger.LogInformation("Criando router {Name} para tenant {TenantId}", dto.Name, tenantId);
 
         try

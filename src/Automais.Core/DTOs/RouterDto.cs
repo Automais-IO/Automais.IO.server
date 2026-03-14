@@ -101,7 +101,6 @@ public class UpdateRouterDto
     public int? Latency { get; set; }
     public string? HardwareInfo { get; set; }
     public string? FirmwareVersion { get; set; }
-    public string? Model { get; set; }
     public string? Description { get; set; }
 }
 

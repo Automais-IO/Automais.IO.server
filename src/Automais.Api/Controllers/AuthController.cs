@@ -10,13 +10,16 @@ namespace Automais.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly ITenantUserService _tenantUserService;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IAuthService authService,
+        ITenantUserService tenantUserService,
         ILogger<AuthController> logger)
     {
         _authService = authService;
+        _tenantUserService = tenantUserService;
         _logger = logger;
     }
 
@@ -47,5 +50,39 @@ public class AuthController : ControllerBase
             return StatusCode(500, new { message = "Erro interno do servidor ao processar login" });
         }
     }
+
+    /// <summary>
+    /// Envia uma nova senha temporária para o email do usuário
+    /// </summary>
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Email))
+            {
+                return BadRequest(new { message = "Email é obrigatório" });
+            }
+
+            await _tenantUserService.ForgotPasswordAsync(request.Email, cancellationToken);
+
+            // Sempre retornar sucesso para não revelar se o email existe
+            return Ok(new { message = "Se o email estiver cadastrado, você receberá uma nova senha temporária em breve." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao processar forgot-password para email: {Email}", request.Email);
+            // Retornar sucesso mesmo em caso de erro para não revelar informações
+            return Ok(new { message = "Se o email estiver cadastrado, você receberá uma nova senha temporária em breve." });
+        }
+    }
+}
+
+/// <summary>
+/// DTO para requisição de esqueci minha senha
+/// </summary>
+public class ForgotPasswordRequestDto
+{
+    public string Email { get; set; } = string.Empty;
 }
 

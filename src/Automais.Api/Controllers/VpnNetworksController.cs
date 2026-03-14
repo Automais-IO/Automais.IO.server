@@ -2,6 +2,7 @@ using Automais.Core.DTOs;
 using Automais.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
+using Automais.Api.Extensions;
 
 namespace Automais.Api.Controllers;
 
@@ -11,19 +12,29 @@ namespace Automais.Api.Controllers;
 public class VpnNetworksController : ControllerBase
 {
     private readonly IVpnNetworkService _vpnNetworkService;
+    private readonly IAuthService _authService;
     private readonly ILogger<VpnNetworksController> _logger;
 
     public VpnNetworksController(
         IVpnNetworkService vpnNetworkService,
+        IAuthService authService,
         ILogger<VpnNetworksController> logger)
     {
         _vpnNetworkService = vpnNetworkService;
+        _authService = authService;
         _logger = logger;
     }
 
     [HttpGet("tenants/{tenantId:guid}/vpn/networks")]
     public async Task<ActionResult<IEnumerable<VpnNetworkDto>>> GetByTenant(Guid tenantId, CancellationToken cancellationToken)
     {
+        // Validar se o usuário tem acesso a este tenant
+        var validationResult = this.ValidateTenantAccess(tenantId, _authService);
+        if (validationResult != null)
+        {
+            return validationResult;
+        }
+
         try
         {
             _logger.LogInformation("Listando redes VPN do tenant {TenantId}", tenantId);
@@ -65,6 +76,13 @@ public class VpnNetworksController : ControllerBase
     [HttpPost("tenants/{tenantId:guid}/vpn/networks")]
     public async Task<ActionResult<VpnNetworkDto>> Create(Guid tenantId, [FromBody] CreateVpnNetworkDto dto, CancellationToken cancellationToken)
     {
+        // Validar se o usuário tem acesso a este tenant
+        var validationResult = this.ValidateTenantAccess(tenantId, _authService);
+        if (validationResult != null)
+        {
+            return validationResult;
+        }
+
         _logger.LogInformation("Criando rede VPN {Slug} para tenant {TenantId}", dto.Slug, tenantId);
 
         try
@@ -91,6 +109,13 @@ public class VpnNetworksController : ControllerBase
         if (network == null)
         {
             return NotFound(new { message = $"Rede VPN com ID {id} não encontrada" });
+        }
+
+        // Validar se a rede VPN pertence ao tenant do usuário autenticado
+        var userTenantId = this.GetTenantId(_authService);
+        if (!userTenantId.HasValue || network.TenantId != userTenantId.Value)
+        {
+            return new ForbidResult();
         }
 
         return Ok(network);

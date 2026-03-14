@@ -493,12 +493,14 @@ builder.Services.AddCors(options =>
                 "http://localhost:5173",
                 "https://automais.io",
                 "https://www.automais.io",
+                "https://api.automais.io",
                 "https://automais.io:5001",
                 "https://www.automais.io:5001"
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials();
+              .AllowCredentials()
+              .SetPreflightMaxAge(TimeSpan.FromHours(24)); // Cache preflight por 24h
     });
 });
 
@@ -679,6 +681,7 @@ app.UseRouting();
 
 // CORS deve vir depois de UseRouting e antes de UseAuthorization
 // IMPORTANTE: SignalR precisa de CORS configurado corretamente
+// CORS também precisa estar antes de qualquer endpoint mapping
 app.UseCors("AllowFrontend");
 
 // Mapear endpoints - SignalR deve vir ANTES de MapControllers e UseAuthorization para evitar conflitos

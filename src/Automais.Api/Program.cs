@@ -479,8 +479,10 @@ builder.Services.AddSwaggerGen(c =>
     { 
         Title = "Automais IoT Platform API", 
         Version = "v1",
-        Description = "API para gerenciamento de plataforma IoT multi-tenant (PostgreSQL)"
+        Description = "API para gerenciamento de plataforma IoT multi-tenant (PostgreSQL). Inclui Auth (login, forgot-password), Tenants, Routers, etc."
     });
+    // Garantir que todos os controllers (incluindo Auth) apareçam no Swagger
+    c.DocInclusionPredicate((_, api) => true);
 });
 
 // CORS (para desenvolvimento e produção)

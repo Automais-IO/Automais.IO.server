@@ -4,9 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Automais.Api.Controllers;
 
+/// <summary>
+/// Autenticação: login e recuperação de senha.
+/// </summary>
 [ApiController]
 [Route("api/auth")]
 [Produces("application/json")]
+[Tags("Auth")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -26,7 +30,15 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Autentica um usuário e retorna um token JWT
     /// </summary>
+    /// <response code="200">Login realizado com sucesso; retorna token e dados do usuário</response>
+    /// <response code="400">Username ou password ausentes</response>
+    /// <response code="401">Credenciais inválidas</response>
+    /// <response code="500">Erro interno do servidor</response>
     [HttpPost("login")]
+    [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request, CancellationToken cancellationToken)
     {
         try
@@ -54,7 +66,10 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Envia uma nova senha temporária para o email do usuário
     /// </summary>
+    /// <response code="200">Mensagem genérica de sucesso (não revela se o email existe)</response>
     [HttpPost("forgot-password")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request, CancellationToken cancellationToken)
     {
         try

@@ -56,4 +56,12 @@ public class UpdateUserNetworksDto
     public IEnumerable<Guid> NetworkIds { get; set; } = Enumerable.Empty<Guid>();
 }
 
+/// <summary>
+/// Resultado do reset de senha (indica se o email foi enviado).
+/// </summary>
+public class ResetPasswordResultDto
+{
+    public bool EmailSent { get; set; }
+}
+
 

@@ -214,7 +214,7 @@ public class TenantUserService : ITenantUserService
         await _userRepository.DeleteAsync(id, cancellationToken);
     }
 
-    public async Task ResetPasswordAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ResetPasswordResultDto> ResetPasswordAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var user = await _userRepository.GetByIdAsync(id, cancellationToken);
         if (user == null)
@@ -233,20 +233,22 @@ public class TenantUserService : ITenantUserService
 
         await _userRepository.UpdateAsync(user, cancellationToken);
 
-        // Enviar email com nova senha
+        // Enviar email com nova senha (não falha o reset se o envio falhar)
         if (_emailService != null)
         {
             try
             {
                 await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name, temporaryPassword, cancellationToken);
+                return new ResetPasswordResultDto { EmailSent = true };
             }
             catch (Exception ex)
             {
-                // Log erro mas não falha o reset
                 System.Diagnostics.Debug.WriteLine($"Erro ao enviar email de reset de senha: {ex.Message}");
-                throw new InvalidOperationException("Senha foi resetada, mas houve erro ao enviar o email. Entre em contato com o suporte.", ex);
+                return new ResetPasswordResultDto { EmailSent = false };
             }
         }
+
+        return new ResetPasswordResultDto { EmailSent = false };
     }
 
     public async Task ForgotPasswordAsync(string email, CancellationToken cancellationToken = default)

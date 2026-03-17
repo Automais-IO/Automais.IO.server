@@ -123,44 +123,26 @@ public class UsersController : ControllerBase
     {
         try
         {
-            await _tenantUserService.ResetPasswordAsync(id, cancellationToken);
-            return Ok(new { message = "Senha resetada com sucesso. Um email com a nova senha temporária foi enviado." });
+            var result = await _tenantUserService.ResetPasswordAsync(id, cancellationToken);
+            var message = result.EmailSent
+                ? "Senha resetada com sucesso. Um email com a nova senha temporária foi enviado."
+                : "Senha resetada com sucesso. O email não pôde ser enviado; informe a nova senha ao usuário manualmente.";
+            return Ok(new { message, emailSent = result.EmailSent });
         }
         catch (KeyNotFoundException ex)
         {
             _logger.LogWarning(ex, "Usuário não encontrado para reset de senha");
             return NotFound(new { message = ex.Message });
         }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogError(ex, "Erro ao resetar senha do usuário {UserId}: {Message}", id, ex.Message);
-            
-            // Retornar informações detalhadas do erro
-            var errorResponse = new
-            {
-                message = "Erro ao resetar senha",
-                error = ex.Message,
-                details = ex.InnerException?.Message,
-                errorType = ex.GetType().Name
-            };
-            
-            return StatusCode(500, errorResponse);
-        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro inesperado ao resetar senha do usuário {UserId}. Tipo: {ExceptionType}, Mensagem: {Message}", 
+            _logger.LogError(ex, "Erro inesperado ao resetar senha do usuário {UserId}. Tipo: {ExceptionType}, Mensagem: {Message}",
                 id, ex.GetType().Name, ex.Message);
-            
-            var errorResponse = new
+            return StatusCode(500, new
             {
                 message = "Erro interno do servidor ao resetar senha",
-                error = ex.Message,
-                details = ex.InnerException?.Message,
-                errorType = ex.GetType().Name,
-                stackTrace = ex.StackTrace
-            };
-            
-            return StatusCode(500, errorResponse);
+                error = ex.Message
+            });
         }
     }
 

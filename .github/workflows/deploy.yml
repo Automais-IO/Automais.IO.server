@@ -51,6 +51,20 @@ jobs:
         source: "deploy.tar.gz"
         target: "/root/automais.io/server.io/"
 
+    - name: Copy deploy configs (nginx) to server
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        timeout: 60s
+        command_timeout: 60s
+        use_insecure_cipher: false
+        debug: true
+        source: "deploy/nginx-api.automais.io.conf,deploy/nginx-automais.io.conf"
+        target: "/root/automais.io/server.io/"
+
     - name: Deploy on server
       uses: appleboy/ssh-action@master
       with:
@@ -72,8 +86,31 @@ jobs:
           tar -xzf deploy.tar.gz
           rm deploy.tar.gz
           
-          # Criar diretório de backups se não existir
+          # Criar diretórios necessários (nginx e app)
           mkdir -p /backups/routers
+          sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+          
+          # Aplicar configs Nginx do repositório (substitui as do servidor)
+          if [ -f /root/automais.io/server.io/nginx-api.automais.io.conf ]; then
+            echo "Configurando Nginx (api.automais.io)..."
+            sudo cp /root/automais.io/server.io/nginx-api.automais.io.conf /etc/nginx/sites-available/automais-api
+            sudo ln -sf /etc/nginx/sites-available/automais-api /etc/nginx/sites-enabled/automais-api
+          fi
+          if [ -f /root/automais.io/server.io/nginx-automais.io.conf ]; then
+            echo "Configurando Nginx (automais.io)..."
+            sudo cp /root/automais.io/server.io/nginx-automais.io.conf /etc/nginx/sites-available/automais.io
+            sudo ln -sf /etc/nginx/sites-available/automais.io /etc/nginx/sites-enabled/automais.io
+          fi
+          if command -v nginx >/dev/null 2>&1; then
+            if sudo nginx -t 2>/dev/null; then
+              echo "Recarregando Nginx..."
+              sudo systemctl reload nginx
+            else
+              echo "Aviso: nginx -t falhou; Nginx não foi recarregado."
+            fi
+          else
+            echo "Aviso: nginx não instalado; configs foram copiadas para /etc/nginx/sites-available."
+          fi
           
           echo "Verificando serviço systemd..."
           if systemctl list-unit-files | grep -q automais-api.service; then

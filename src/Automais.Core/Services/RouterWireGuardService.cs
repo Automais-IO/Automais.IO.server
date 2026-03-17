@@ -252,8 +252,29 @@ public class RouterWireGuardService : IRouterWireGuardService
             throw new KeyNotFoundException($"Peer WireGuard com ID {id} não encontrado.");
         }
 
-        // Se já tem ConfigContent salvo no banco, usar ele (mais rápido)
-        if (!string.IsNullOrWhiteSpace(peer.ConfigContent))
+        var vpnNetwork = await _vpnNetworkRepository.GetByIdAsync(peer.VpnNetworkId, cancellationToken);
+        if (vpnNetwork == null)
+        {
+            throw new KeyNotFoundException($"Rede VPN com ID {peer.VpnNetworkId} não encontrada.");
+        }
+
+        var hadServerPublicKey = !string.IsNullOrWhiteSpace(vpnNetwork.ServerPublicKey);
+
+        // Se ServerPublicKey está vazio, tentar obter do VPN server e salvar na VpnNetwork
+        if (!hadServerPublicKey)
+        {
+            var serverKey = await _vpnServiceClient.GetServerPublicKeyAsync(peer.VpnNetworkId, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(serverKey))
+            {
+                vpnNetwork.ServerPublicKey = serverKey.Trim();
+                vpnNetwork.UpdatedAt = DateTime.UtcNow;
+                await _vpnNetworkRepository.UpdateAsync(vpnNetwork, cancellationToken);
+                _logger?.LogInformation("ServerPublicKey obtida do VPN server e salva na VpnNetwork {VpnNetworkId}", vpnNetwork.Id);
+            }
+        }
+
+        // Só usar cache se já tínhamos a chave antes (cache antigo pode ter PublicKey vazio)
+        if (!string.IsNullOrWhiteSpace(peer.ConfigContent) && hadServerPublicKey)
         {
             var router = await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
             var fileName = router != null 
@@ -272,28 +293,19 @@ public class RouterWireGuardService : IRouterWireGuardService
             };
         }
 
-        // Se não tem ConfigContent salvo, gerar agora (para peers antigos)
+        // Gerar config (peer antigo sem cache, ou acabamos de obter ServerPublicKey)
         var routerForConfig = await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
         if (routerForConfig == null)
         {
             throw new KeyNotFoundException($"Router com ID {peer.RouterId} não encontrado.");
         }
 
-        var vpnNetwork = await _vpnNetworkRepository.GetByIdAsync(peer.VpnNetworkId, cancellationToken);
-        if (vpnNetwork == null)
-        {
-            throw new KeyNotFoundException($"Rede VPN com ID {peer.VpnNetworkId} não encontrada.");
-        }
-
-        // Gerar configuração diretamente a partir dos dados do peer
         var configContent = GenerateRouterConfig(routerForConfig, peer, vpnNetwork);
         
-        // Salvar no banco para próxima vez
         peer.ConfigContent = configContent;
         peer.UpdatedAt = DateTime.UtcNow;
         await _peerRepository.UpdateAsync(peer, cancellationToken);
         
-        // Nome do arquivo baseado no nome do router
         var fileNameForConfig = SanitizeFileName(routerForConfig.Name);
         if (!fileNameForConfig.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
         {

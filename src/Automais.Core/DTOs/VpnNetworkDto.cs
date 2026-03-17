@@ -47,6 +47,11 @@ public class UpdateVpnNetworkDto
     /// O frontend deve sempre enviar este valor (preenchido com "automais.io" por padrão, mas editável).
     /// </summary>
     public string? ServerEndpoint { get; set; }
+    /// <summary>
+    /// Chave pública do servidor WireGuard. Preenchida automaticamente pela API ao obter do VPN server,
+    /// ou manualmente se o servidor for externo.
+    /// </summary>
+    public string? ServerPublicKey { get; set; }
 }
 
 

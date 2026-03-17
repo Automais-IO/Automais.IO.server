@@ -137,6 +137,11 @@ public class VpnNetworkService : IVpnNetworkService
             network.ServerEndpoint = dto.ServerEndpoint;
         }
 
+        if (dto.ServerPublicKey != null)
+        {
+            network.ServerPublicKey = dto.ServerPublicKey;
+        }
+
         network.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _vpnNetworkRepository.UpdateAsync(network, cancellationToken);

@@ -64,5 +64,13 @@ public interface IVpnServiceClient
     Task RemoveInterfaceAsync(
         Guid vpnNetworkId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtém a chave pública do servidor WireGuard para uma VpnNetwork (da interface ativa no VPN server).
+    /// Retorna null se a interface não existir ou não estiver ativa.
+    /// </summary>
+    Task<string?> GetServerPublicKeyAsync(
+        Guid vpnNetworkId,
+        CancellationToken cancellationToken = default);
 }
 

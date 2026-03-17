@@ -376,6 +376,29 @@ public class VpnServiceClient : IVpnServiceClient
         }
     }
 
+    public async Task<string?> GetServerPublicKeyAsync(
+        Guid vpnNetworkId,
+        CancellationToken cancellationToken = default)
+    {
+        var serverEndpoint = await GetServerEndpointAsync(vpnNetworkId, cancellationToken);
+        var baseUrl = GetBaseUrl(serverEndpoint);
+        var fullUrl = $"{baseUrl.TrimEnd('/')}/api/v1/vpn/network/{vpnNetworkId}/server-public-key";
+
+        try
+        {
+            var response = await _httpClient.GetAsync(fullUrl, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                return null;
+            var result = await response.Content.ReadFromJsonAsync<ServerPublicKeyResponse>(cancellationToken);
+            return result?.ServerPublicKey?.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Não foi possível obter server public key do VPN server para VpnNetwork {VpnNetworkId}", vpnNetworkId);
+            return null;
+        }
+    }
+
     // Classes auxiliares para deserialização
     private class ProvisionPeerResponse
     {
@@ -390,6 +413,11 @@ public class VpnServiceClient : IVpnServiceClient
     {
         public string ConfigContent { get; set; } = string.Empty;
         public string Filename { get; set; } = string.Empty;
+    }
+
+    private class ServerPublicKeyResponse
+    {
+        public string? ServerPublicKey { get; set; }
     }
 
 }

@@ -603,21 +603,32 @@ public class RouterWireGuardService : IRouterWireGuardService
         // Extrair IP do servidor da rede VPN (primeiro IP da rede + 1)
         var serverIp = ExtractServerIpFromCidr(vpnNetwork.Cidr);
         
+        var serverEndpoint = vpnNetwork.ServerEndpoint ?? "automais.io";
+        var serverPublicKey = (vpnNetwork.ServerPublicKey ?? "").Trim();
+        var listenPort = peer.ListenPort ?? 51820;
+
         var configLines = new List<string>
         {
             "# Configuração VPN para Router",
             "",
-            $"# Router: {router.Name}",
+            $"# Router (peer): {router.Name}",
+            $"# Server (endpoint): {serverEndpoint}",
             $"# Gerado em: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC",
             "",
             "[Interface]",
             $"PrivateKey = {peer.PrivateKey}",
             $"Address = {routerIp}/{networkPrefix}", // Usar /24 do CIDR da VPN (não /32 do BD) para RouterOS importar corretamente
             "",
+            "# Peer = servidor VPN (este router conecta a ele)",
             "[Peer]",
-            $"PublicKey = {vpnNetwork.ServerPublicKey ?? ""}",
-            $"Endpoint = {vpnNetwork.ServerEndpoint ?? "automais.io"}:{peer.ListenPort ?? 51820}",
         };
+
+        if (string.IsNullOrEmpty(serverPublicKey))
+        {
+            configLines.Add("# PublicKey do servidor — preencha com a chave do servidor (wg show no servidor VPN)");
+        }
+        configLines.Add($"PublicKey = {serverPublicKey}");
+        configLines.Add($"Endpoint = {serverEndpoint}:{listenPort}");
 
         // Construir AllowedIPs: CIDR da VPN + redes permitidas adicionais
         var allowedIpsParts = peer.AllowedIps.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

@@ -325,12 +325,29 @@ public class RouterWireGuardService : IRouterWireGuardService
             throw new KeyNotFoundException($"Peer WireGuard com ID {id} não encontrado.");
         }
 
-        // ⚠️ ATENÇÃO: Regenerar chaves requer remover o peer antigo do servidor e adicionar o novo
-        // Por enquanto, lançar exceção informando que precisa deletar e recriar
-        throw new NotImplementedException(
-            "Regeneração de chaves ainda não está implementada. " +
-            "Para regenerar chaves, delete o peer e crie novamente via ProvisionRouterAsync. " +
-            "Isso garantirá que as chaves sejam geradas corretamente usando 'wg genkey' do sistema Linux.");
+        var vpnNetwork = peer.VpnNetwork ?? await _vpnNetworkRepository.GetByIdAsync(peer.VpnNetworkId, cancellationToken);
+        if (vpnNetwork == null)
+        {
+            throw new InvalidOperationException($"Rede VPN {peer.VpnNetworkId} não encontrada para o peer.");
+        }
+
+        var router = peer.Router ?? await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
+        if (router == null)
+        {
+            throw new InvalidOperationException($"Router {peer.RouterId} não encontrado para o peer.");
+        }
+
+        var (publicKey, privateKey) = await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+        peer.PublicKey = publicKey;
+        peer.PrivateKey = privateKey;
+        peer.VpnNetwork = vpnNetwork;
+        peer.ConfigContent = GenerateRouterConfig(router, peer, vpnNetwork);
+        peer.UpdatedAt = DateTime.UtcNow;
+
+        await _peerRepository.UpdateAsync(peer, cancellationToken);
+
+        var reloaded = await _peerRepository.GetByIdAsync(id, cancellationToken);
+        return MapToDto(reloaded!);
     }
 
     public async Task RefreshPeerConfigsForNetworkAsync(Guid vpnNetworkId, CancellationToken cancellationToken = default)
@@ -387,58 +404,7 @@ public class RouterWireGuardService : IRouterWireGuardService
     {
         try
         {
-            // Gerar chave privada
-            var privateKeyProcess = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/wg",
-                    Arguments = "genkey",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                }
-            };
-
-            privateKeyProcess.Start();
-            var privateKey = (await privateKeyProcess.StandardOutput.ReadToEndAsync(cancellationToken)).Trim();
-            await privateKeyProcess.WaitForExitAsync(cancellationToken);
-
-            if (privateKeyProcess.ExitCode != 0 || string.IsNullOrEmpty(privateKey))
-            {
-                throw new InvalidOperationException("Erro ao gerar chave privada WireGuard");
-            }
-
-            // Gerar chave pública a partir da privada
-            var publicKeyProcess = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/wg",
-                    Arguments = "pubkey",
-                    UseShellExecute = false,
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                }
-            };
-
-            publicKeyProcess.Start();
-            await publicKeyProcess.StandardInput.WriteAsync(privateKey);
-            await publicKeyProcess.StandardInput.FlushAsync();
-            publicKeyProcess.StandardInput.Close();
-            
-            var publicKey = (await publicKeyProcess.StandardOutput.ReadToEndAsync(cancellationToken)).Trim();
-            await publicKeyProcess.WaitForExitAsync(cancellationToken);
-
-            if (publicKeyProcess.ExitCode != 0 || string.IsNullOrEmpty(publicKey))
-            {
-                throw new InvalidOperationException("Erro ao gerar chave pública WireGuard");
-            }
-
-            return (publicKey, privateKey);
+            return await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
         }
         catch (Exception ex)
         {

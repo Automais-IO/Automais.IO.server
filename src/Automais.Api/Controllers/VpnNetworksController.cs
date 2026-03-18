@@ -93,7 +93,10 @@ public class VpnNetworksController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Erro ao criar rede VPN");
-            return BadRequest(new { message = ex.Message });
+            var code = ex.Message.Contains("porta UDP", StringComparison.OrdinalIgnoreCase)
+                ? "LISTEN_PORT_CONFLICT"
+                : "VALIDATION_ERROR";
+            return BadRequest(new { code, message = ex.Message });
         }
         catch (KeyNotFoundException ex)
         {
@@ -124,6 +127,18 @@ public class VpnNetworksController : ControllerBase
     [HttpPut("vpn/networks/{id:guid}")]
     public async Task<ActionResult<VpnNetworkDto>> Update(Guid id, [FromBody] UpdateVpnNetworkDto dto, CancellationToken cancellationToken)
     {
+        var existing = await _vpnNetworkService.GetByIdAsync(id, cancellationToken);
+        if (existing == null)
+        {
+            return NotFound(new { message = $"Rede VPN com ID {id} não encontrada" });
+        }
+
+        var userTenantId = this.GetTenantId(_authService);
+        if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
+        {
+            return new ForbidResult();
+        }
+
         try
         {
             var updated = await _vpnNetworkService.UpdateAsync(id, dto, cancellationToken);
@@ -137,15 +152,62 @@ public class VpnNetworksController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Validação ao atualizar rede VPN");
-            return BadRequest(new { message = ex.Message });
+            var code = ex.Message.Contains("porta UDP", StringComparison.OrdinalIgnoreCase)
+                ? "LISTEN_PORT_CONFLICT"
+                : "VALIDATION_ERROR";
+            return BadRequest(new { code, message = ex.Message });
         }
     }
 
     [HttpDelete("vpn/networks/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
+        var existing = await _vpnNetworkService.GetByIdAsync(id, cancellationToken);
+        if (existing == null)
+        {
+            return NoContent();
+        }
+
+        var userTenantId = this.GetTenantId(_authService);
+        if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
+        {
+            return new ForbidResult();
+        }
+
         await _vpnNetworkService.DeleteAsync(id, cancellationToken);
         return NoContent();
+    }
+
+    [HttpPost("vpn/networks/{id:guid}/regenerate-server-keys")]
+    public async Task<ActionResult<VpnNetworkDto>> RegenerateServerKeys(Guid id, CancellationToken cancellationToken)
+    {
+        var existing = await _vpnNetworkService.GetByIdAsync(id, cancellationToken);
+        if (existing == null)
+        {
+            return NotFound(new { message = $"Rede VPN com ID {id} não encontrada" });
+        }
+
+        var userTenantId = this.GetTenantId(_authService);
+        if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
+        {
+            return new ForbidResult();
+        }
+
+        try
+        {
+            var updated = await _vpnNetworkService.RegenerateServerKeysAsync(id, cancellationToken);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Rede VPN não encontrada ao renovar chaves do servidor");
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Erro ao gerar chaves WireGuard do servidor");
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpGet("vpn/networks/{id:guid}/users")]

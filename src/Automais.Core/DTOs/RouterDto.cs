@@ -42,6 +42,10 @@ public class RouterDto
     /// Redes permitidas para o router via VPN (ex: ["10.0.1.0/24", "192.168.100.0/24"])
     /// </summary>
     public IEnumerable<string>? AllowedNetworks { get; set; }
+    /// <summary>Peer WireGuard para a VpnNetworkId atual, se existir.</summary>
+    public Guid? WireGuardPeerId { get; set; }
+    /// <summary>True se o peer tem public e private key preenchidos.</summary>
+    public bool WireGuardPeerKeysConfigured { get; set; }
 }
 
 /// <summary>

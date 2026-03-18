@@ -10,6 +10,7 @@ public interface IVpnNetworkService
     Task<VpnNetworkDto> UpdateAsync(Guid id, UpdateVpnNetworkDto dto, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IEnumerable<TenantUserDto>> GetUsersAsync(Guid networkId, CancellationToken cancellationToken = default);
+    Task<VpnNetworkDto> RegenerateServerKeysAsync(Guid networkId, CancellationToken cancellationToken = default);
 }
 
 

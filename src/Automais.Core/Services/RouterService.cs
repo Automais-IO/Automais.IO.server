@@ -16,6 +16,7 @@ public class RouterService : IRouterService
     private readonly IRouterAllowedNetworkRepository? _allowedNetworkRepository;
     private readonly IRouterWireGuardService? _wireGuardService;
     private readonly IVpnNetworkRepository? _vpnNetworkRepository;
+    private readonly IRouterWireGuardPeerRepository? _wireGuardPeerRepository;
     private readonly ILogger<RouterService>? _logger;
 
     public RouterService(
@@ -24,6 +25,7 @@ public class RouterService : IRouterService
         IRouterAllowedNetworkRepository? allowedNetworkRepository = null,
         IRouterWireGuardService? wireGuardService = null,
         IVpnNetworkRepository? vpnNetworkRepository = null,
+        IRouterWireGuardPeerRepository? wireGuardPeerRepository = null,
         ILogger<RouterService>? logger = null)
     {
         _routerRepository = routerRepository;
@@ -31,6 +33,7 @@ public class RouterService : IRouterService
         _allowedNetworkRepository = allowedNetworkRepository;
         _wireGuardService = wireGuardService;
         _vpnNetworkRepository = vpnNetworkRepository;
+        _wireGuardPeerRepository = wireGuardPeerRepository;
         _logger = logger;
     }
 
@@ -324,6 +327,8 @@ public class RouterService : IRouterService
 
         // Buscar ServerEndpoint da VpnNetwork se houver repositório disponível
         string? vpnNetworkServerEndpoint = null;
+        Guid? wireGuardPeerId = null;
+        var wireGuardPeerKeysConfigured = false;
         if (router.VpnNetworkId.HasValue && _vpnNetworkRepository != null)
         {
             try
@@ -333,8 +338,26 @@ public class RouterService : IRouterService
             }
             catch
             {
-                // Se falhar, deixa como null
                 vpnNetworkServerEndpoint = null;
+            }
+        }
+
+        if (router.VpnNetworkId.HasValue && _wireGuardPeerRepository != null)
+        {
+            try
+            {
+                var peer = await _wireGuardPeerRepository.GetByRouterIdAndNetworkIdAsync(
+                    router.Id, router.VpnNetworkId.Value, cancellationToken);
+                if (peer != null)
+                {
+                    wireGuardPeerId = peer.Id;
+                    wireGuardPeerKeysConfigured = !string.IsNullOrWhiteSpace(peer.PublicKey)
+                                                  && !string.IsNullOrWhiteSpace(peer.PrivateKey);
+                }
+            }
+            catch
+            {
+                // ignora
             }
         }
 
@@ -359,7 +382,9 @@ public class RouterService : IRouterService
             Description = router.Description,
             CreatedAt = router.CreatedAt,
             UpdatedAt = router.UpdatedAt,
-            AllowedNetworks = allowedNetworks
+            AllowedNetworks = allowedNetworks,
+            WireGuardPeerId = wireGuardPeerId,
+            WireGuardPeerKeysConfigured = wireGuardPeerKeysConfigured
         };
     }
 

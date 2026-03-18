@@ -85,6 +85,9 @@ public class VpnNetworkService : IVpnNetworkService
             listenPort = await AllocateNextListenPortAsync(serverEndpoint, cancellationToken);
         }
 
+        var (serverPublicKey, serverPrivateKey) =
+            await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+
         var network = new VpnNetwork
         {
             Id = Guid.NewGuid(),
@@ -97,6 +100,8 @@ public class VpnNetworkService : IVpnNetworkService
             DnsServers = dto.DnsServers,
             ServerEndpoint = serverEndpoint,
             ListenPort = listenPort,
+            ServerPublicKey = serverPublicKey,
+            ServerPrivateKey = serverPrivateKey,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -150,9 +155,22 @@ public class VpnNetworkService : IVpnNetworkService
             network.DnsServers = dto.DnsServers;
         }
 
+        var serverEndpointChanged = false;
         if (dto.ServerEndpoint != null)
         {
-            network.ServerEndpoint = dto.ServerEndpoint;
+            var newEp = !string.IsNullOrWhiteSpace(dto.ServerEndpoint.Trim())
+                ? dto.ServerEndpoint.Trim()
+                : _wireGuardSettings.DefaultServerEndpoint;
+            if (!string.Equals(network.ServerEndpoint?.Trim(), newEp, StringComparison.Ordinal))
+            {
+                serverEndpointChanged = true;
+            }
+
+            network.ServerEndpoint = newEp;
+        }
+        else if (string.IsNullOrWhiteSpace(network.ServerEndpoint))
+        {
+            network.ServerEndpoint = _wireGuardSettings.DefaultServerEndpoint;
         }
 
         if (dto.ServerPublicKey != null)
@@ -164,20 +182,26 @@ public class VpnNetworkService : IVpnNetworkService
         if (dto.ListenPort.HasValue && dto.ListenPort.Value != network.ListenPort)
         {
             var newPort = ValidateListenPort(dto.ListenPort.Value);
-            if (!await IsListenPortAvailableAsync(network.ServerEndpoint, newPort, network.Id, cancellationToken))
-            {
-                throw new InvalidOperationException(
-                    $"A porta UDP {newPort} já está em uso por outra rede VPN no mesmo servidor.");
-            }
-
             network.ListenPort = newPort;
             listenPortChanged = true;
+        }
+
+        if (network.ListenPort <= 0)
+        {
+            network.ListenPort = 51820;
+        }
+
+        // Sempre validar par (endpoint, porta): troca só de endpoint pode colidir com outra rede no novo servidor
+        if (!await IsListenPortAvailableAsync(network.ServerEndpoint, network.ListenPort, network.Id, cancellationToken))
+        {
+            throw new InvalidOperationException(
+                $"A porta UDP {network.ListenPort} já está em uso por outra rede VPN no mesmo servidor ({network.ServerEndpoint}). Escolha outra porta ou outro endpoint.");
         }
 
         network.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _vpnNetworkRepository.UpdateAsync(network, cancellationToken);
-        if (listenPortChanged && _routerWireGuardService != null)
+        if ((listenPortChanged || serverEndpointChanged) && _routerWireGuardService != null)
         {
             await _routerWireGuardService.RefreshPeerConfigsForNetworkAsync(network.Id, cancellationToken);
         }
@@ -211,6 +235,29 @@ public class VpnNetworkService : IVpnNetworkService
         await _vpnNetworkRepository.DeleteAsync(id, cancellationToken);
     }
 
+    public async Task<VpnNetworkDto> RegenerateServerKeysAsync(Guid networkId, CancellationToken cancellationToken = default)
+    {
+        var network = await _vpnNetworkRepository.GetByIdAsync(networkId, cancellationToken);
+        if (network == null)
+        {
+            throw new KeyNotFoundException($"Rede VPN com ID {networkId} não encontrada.");
+        }
+
+        var (serverPublicKey, serverPrivateKey) =
+            await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+        network.ServerPublicKey = serverPublicKey;
+        network.ServerPrivateKey = serverPrivateKey;
+        network.UpdatedAt = DateTime.UtcNow;
+
+        var updated = await _vpnNetworkRepository.UpdateAsync(network, cancellationToken);
+        if (_routerWireGuardService != null)
+        {
+            await _routerWireGuardService.RefreshPeerConfigsForNetworkAsync(networkId, cancellationToken);
+        }
+
+        return await MapToDtoAsync(updated, cancellationToken);
+    }
+
     public async Task<IEnumerable<TenantUserDto>> GetUsersAsync(Guid networkId, CancellationToken cancellationToken = default)
     {
         var network = await _vpnNetworkRepository.GetByIdAsync(networkId, cancellationToken);
@@ -239,6 +286,9 @@ public class VpnNetworkService : IVpnNetworkService
         var userCount = await _vpnNetworkRepository.CountMembershipsByNetworkIdAsync(network.Id, cancellationToken);
         var deviceCount = await _deviceRepository.CountByNetworkIdAsync(network.Id, cancellationToken);
 
+        var hasServerKeys = !string.IsNullOrWhiteSpace(network.ServerPrivateKey)
+                            && !string.IsNullOrWhiteSpace(network.ServerPublicKey);
+
         return new VpnNetworkDto
         {
             Id = network.Id,
@@ -251,6 +301,8 @@ public class VpnNetworkService : IVpnNetworkService
             DnsServers = network.DnsServers,
             ServerEndpoint = network.ServerEndpoint,
             ListenPort = network.ListenPort > 0 ? network.ListenPort : 51820,
+            ServerKeysConfigured = hasServerKeys,
+            ServerPublicKey = network.ServerPublicKey,
             UserCount = userCount,
             DeviceCount = deviceCount,
             CreatedAt = network.CreatedAt,

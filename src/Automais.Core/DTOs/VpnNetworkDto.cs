@@ -17,6 +17,10 @@ public class VpnNetworkDto
     public string? ServerEndpoint { get; set; }
     /// <summary>Porta UDP WireGuard no servidor (única por ServerEndpoint).</summary>
     public int ListenPort { get; set; }
+    /// <summary>True se ServerPrivateKey e ServerPublicKey estão preenchidos no banco.</summary>
+    public bool ServerKeysConfigured { get; set; }
+    /// <summary>Chave pública do servidor (somente leitura; a privada nunca é exposta).</summary>
+    public string? ServerPublicKey { get; set; }
     public int UserCount { get; set; }
     public int DeviceCount { get; set; }
     public DateTime CreatedAt { get; set; }

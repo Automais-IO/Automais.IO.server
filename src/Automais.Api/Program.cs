@@ -365,7 +365,8 @@ builder.Services.AddScoped<IRouterService>(sp =>
     var wireGuardService = sp.GetService<IRouterWireGuardService>(); // Opcional
     var vpnNetworkRepo = sp.GetService<IVpnNetworkRepository>(); // Opcional
     var logger = sp.GetService<ILogger<Automais.Core.Services.RouterService>>();
-    return new Automais.Core.Services.RouterService(routerRepo, tenantRepo, allowedNetworkRepo, wireGuardService, vpnNetworkRepo, logger);
+    var peerRepo = sp.GetService<IRouterWireGuardPeerRepository>();
+    return new Automais.Core.Services.RouterService(routerRepo, tenantRepo, allowedNetworkRepo, wireGuardService, vpnNetworkRepo, peerRepo, logger);
 });
 
 // Registrar RouterStaticRouteService

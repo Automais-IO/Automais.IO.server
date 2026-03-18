@@ -204,6 +204,11 @@ public class RouterWireGuardController : ControllerBase
             _logger.LogWarning(ex, "Peer WireGuard não encontrado");
             return NotFound(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Erro ao renovar chaves do peer");
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>

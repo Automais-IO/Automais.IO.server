@@ -687,6 +687,50 @@ app.UseRouting();
 // CORS também precisa estar antes de qualquer endpoint mapping
 app.UseCors("AllowFrontend");
 
+// Bloqueia demais rotas /api/* quando JWT exige troca de senha (senha temporária)
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? "";
+    if (!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+    {
+        await next();
+        return;
+    }
+
+    if ((path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase) ||
+         path.Equals("/api/auth/forgot-password", StringComparison.OrdinalIgnoreCase)) &&
+        context.Request.Method == HttpMethods.Post)
+    {
+        await next();
+        return;
+    }
+
+    var auth = context.Request.Headers.Authorization.FirstOrDefault();
+    if (string.IsNullOrEmpty(auth) || !auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+    {
+        await next();
+        return;
+    }
+
+    var token = auth["Bearer ".Length..].Trim();
+    var authService = context.RequestServices.GetRequiredService<Automais.Core.Interfaces.IAuthService>();
+    var (valid, mustCh) = await authService.GetTokenPasswordChangeStateAsync(token, context.RequestAborted);
+    if (valid && mustCh &&
+        !(path.Equals("/api/auth/change-password", StringComparison.OrdinalIgnoreCase) &&
+          context.Request.Method == HttpMethods.Post))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = "Defina uma nova senha antes de continuar.",
+            code = "MUST_CHANGE_PASSWORD"
+        });
+        return;
+    }
+
+    await next();
+});
+
 // Mapear endpoints - SignalR deve vir ANTES de MapControllers e UseAuthorization para evitar conflitos
 // O endpoint de negociação do SignalR precisa ser acessível sem autenticação
 app.MapHub<Automais.Core.Hubs.RouterStatusHub>("/hubs/router-status");

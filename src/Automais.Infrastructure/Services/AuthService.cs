@@ -29,23 +29,20 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponseDto> LoginAsync(string username, string password, CancellationToken cancellationToken = default)
     {
-        // Buscar usuário por email (username)
         var user = await _userRepository.GetByEmailAsync(username, cancellationToken);
-        
+
         if (user == null)
         {
             _logger?.LogWarning("Tentativa de login com email não encontrado: {Email}", username);
             throw new UnauthorizedAccessException("Credenciais inválidas");
         }
 
-        // Verificar status do usuário
         if (user.Status != TenantUserStatus.Active)
         {
             _logger?.LogWarning("Tentativa de login com usuário inativo: {Email} (Status: {Status})", username, user.Status);
             throw new UnauthorizedAccessException("Usuário não está ativo");
         }
 
-        // Verificar se está usando senha temporária e se ela expirou
         if (!string.IsNullOrWhiteSpace(user.TemporaryPassword) && user.TemporaryPasswordExpiresAt.HasValue)
         {
             if (DateTime.UtcNow > user.TemporaryPasswordExpiresAt.Value)
@@ -55,35 +52,35 @@ public class AuthService : IAuthService
             }
         }
 
-        // Verificar senha
         if (string.IsNullOrWhiteSpace(user.PasswordHash))
         {
             _logger?.LogWarning("Usuário sem senha configurada: {Email}", username);
             throw new UnauthorizedAccessException("Credenciais inválidas");
         }
 
-        // Verificar se a senha fornecida corresponde
         var providedPasswordHash = HashPassword(password);
         if (providedPasswordHash != user.PasswordHash)
         {
             _logger?.LogWarning("Tentativa de login com senha incorreta: {Email}", username);
             throw new UnauthorizedAccessException("Credenciais inválidas");
         }
-        
-        // Atualizar último login
+
+        var usedTemporaryPassword = SafeEqualString(user.TemporaryPassword, password);
+
         user.LastLoginAt = DateTime.UtcNow;
         await _userRepository.UpdateAsync(user, cancellationToken);
 
-        // Gerar token JWT
-        var token = GenerateToken(user.Id, user.Email, user.TenantId);
-        var expiresAt = DateTime.UtcNow.AddHours(24); // Token válido por 24 horas
+        var token = GenerateToken(user.Id, user.Email, user.TenantId, usedTemporaryPassword);
+        var expiresAt = DateTime.UtcNow.AddHours(24);
 
-        _logger?.LogInformation("Login bem-sucedido para usuário {Email} (ID: {UserId})", user.Email, user.Id);
+        _logger?.LogInformation("Login bem-sucedido para usuário {Email} (ID: {UserId}){Temp}",
+            user.Email, user.Id, usedTemporaryPassword ? " [senha temporária — troca obrigatória]" : "");
 
         return new LoginResponseDto
         {
             Token = token,
             ExpiresAt = expiresAt,
+            MustChangePassword = usedTemporaryPassword,
             User = new UserInfoDto
             {
                 Id = user.Id,
@@ -94,37 +91,83 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<LoginResponseDto> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+            throw new InvalidOperationException("A nova senha deve ter pelo menos 8 caracteres.");
+
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user == null || user.Status != TenantUserStatus.Active)
+            throw new UnauthorizedAccessException("Sessão inválida.");
+
+        if (string.IsNullOrWhiteSpace(user.PasswordHash) || HashPassword(currentPassword) != user.PasswordHash)
+            throw new UnauthorizedAccessException("Senha atual incorreta.");
+
+        user.PasswordHash = HashPassword(newPassword);
+        user.TemporaryPassword = null;
+        user.TemporaryPasswordExpiresAt = null;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _userRepository.UpdateAsync(user, cancellationToken);
+
+        var token = GenerateToken(user.Id, user.Email, user.TenantId, false);
+        return new LoginResponseDto
+        {
+            Token = token,
+            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            MustChangePassword = false,
+            User = new UserInfoDto
+            {
+                Id = user.Id,
+                Name = user.Name,
+                Email = user.Email,
+                TenantId = user.TenantId
+            }
+        };
+    }
+
+    public async Task<(bool Valid, bool MustChangePassword)> GetTokenPasswordChangeStateAsync(string token,
+        CancellationToken cancellationToken = default)
+    {
+        await Task.CompletedTask;
+        try
+        {
+            var principal = ValidateTokenToPrincipal(token);
+            if (principal == null)
+                return (false, false);
+            var must = string.Equals(principal.FindFirst("must_chpwd")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+            return (true, must);
+        }
+        catch
+        {
+            return (false, false);
+        }
+    }
+
+    public Guid? GetUserIdFromToken(string token)
+    {
+        var principal = ValidateTokenToPrincipal(token);
+        if (principal == null)
+            return null;
+        var id = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal.FindFirst("userId")?.Value;
+        return Guid.TryParse(id, out var g) ? g : null;
+    }
+
     public async Task<UserInfoDto?> ValidateTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         try
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = GetSigningKey();
-            
-            var validationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = key,
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.Zero
-            };
-
-            var principal = tokenHandler.ValidateToken(token, validationParameters, out var validatedToken);
-            var jwtToken = (JwtSecurityToken)validatedToken;
-
-            var userIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier || c.Type == "userId");
-            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-            {
+            var principal = ValidateTokenToPrincipal(token);
+            if (principal == null)
                 return null;
-            }
+
+            var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal.FindFirst("userId")?.Value;
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
+                return null;
 
             var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
             if (user == null || user.Status != TenantUserStatus.Active)
-            {
                 return null;
-            }
 
             return new UserInfoDto
             {
@@ -141,18 +184,20 @@ public class AuthService : IAuthService
         }
     }
 
-    public string GenerateToken(Guid userId, string email, Guid tenantId)
+    public string GenerateToken(Guid userId, string email, Guid tenantId, bool mustChangePassword = false)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = GetSigningKey();
-        
+
         var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(ClaimTypes.Email, email),
-            new Claim("tenantId", tenantId.ToString()),
-            new Claim("userId", userId.ToString())
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new(ClaimTypes.Email, email),
+            new("tenantId", tenantId.ToString()),
+            new("userId", userId.ToString())
         };
+        if (mustChangePassword)
+            claims.Add(new Claim("must_chpwd", "true"));
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
@@ -161,23 +206,44 @@ public class AuthService : IAuthService
             SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature)
         };
 
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        var jwt = tokenHandler.CreateToken(tokenDescriptor);
+        return tokenHandler.WriteToken(jwt);
+    }
+
+    private ClaimsPrincipal? ValidateTokenToPrincipal(string token)
+    {
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = GetSigningKey();
+        var validationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = key,
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+        var principal = tokenHandler.ValidateToken(token, validationParameters, out _);
+        return principal;
+    }
+
+    private static bool SafeEqualString(string? a, string b)
+    {
+        if (string.IsNullOrEmpty(a) || a.Length != b.Length)
+            return false;
+        var r = 0;
+        for (var i = 0; i < a.Length; i++)
+            r |= a[i] ^ b[i];
+        return r == 0;
     }
 
     private SymmetricSecurityKey GetSigningKey()
     {
-        // Obter chave secreta da configuração ou usar uma padrão
-        var secretKey = _configuration["Jwt:SecretKey"] 
-            ?? _configuration["JWT_SECRET_KEY"] 
-            ?? "AutomaisSecretKey_ChangeInProduction_Minimum32Characters";
-        
-        // Garantir que a chave tem pelo menos 32 caracteres
+        var secretKey = _configuration["Jwt:SecretKey"]
+                        ?? _configuration["JWT_SECRET_KEY"]
+                        ?? "AutomaisSecretKey_ChangeInProduction_Minimum32Characters";
         if (secretKey.Length < 32)
-        {
             secretKey = secretKey.PadRight(32, '0');
-        }
-
         return new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
     }
 
@@ -188,4 +254,3 @@ public class AuthService : IAuthService
         return Convert.ToBase64String(hashedBytes);
     }
 }
-

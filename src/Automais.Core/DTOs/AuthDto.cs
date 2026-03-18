@@ -17,6 +17,16 @@ public class LoginResponseDto
     public string Token { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public UserInfoDto User { get; set; } = null!;
+
+    /// <summary>True quando o login foi com senha temporária — o cliente deve exigir nova senha antes do restante do app.</summary>
+    public bool MustChangePassword { get; set; }
+}
+
+/// <summary>Troca de senha (usuário autenticado, ex.: após senha temporária).</summary>
+public class ChangePasswordRequestDto
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
 }
 
 /// <summary>

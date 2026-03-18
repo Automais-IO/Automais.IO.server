@@ -8,7 +8,10 @@ namespace Automais.Core.Interfaces;
 public interface IAuthService
 {
     Task<LoginResponseDto> LoginAsync(string username, string password, CancellationToken cancellationToken = default);
+    Task<LoginResponseDto> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, CancellationToken cancellationToken = default);
     Task<UserInfoDto?> ValidateTokenAsync(string token, CancellationToken cancellationToken = default);
-    string GenerateToken(Guid userId, string email, Guid tenantId);
+    Task<(bool Valid, bool MustChangePassword)> GetTokenPasswordChangeStateAsync(string token, CancellationToken cancellationToken = default);
+    Guid? GetUserIdFromToken(string token);
+    string GenerateToken(Guid userId, string email, Guid tenantId, bool mustChangePassword = false);
 }
 

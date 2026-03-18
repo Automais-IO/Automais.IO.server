@@ -51,27 +51,22 @@ public class EmailService : IEmailService
             _smtpPassword = _smtpPassword.Trim();
         }
         
-        // Log para debug (sem expor senha completa)
-        _logger?.LogInformation("EmailService inicializado - Host: {Host}, Port: {Port}, Username: {Username}, Password Length: {PasswordLength}, Password primeiro char: {FirstChar}, último char: {LastChar}", 
-            _smtpHost, _smtpPort, _smtpUsername, _smtpPassword?.Length ?? 0,
-            _smtpPassword?.Length > 0 ? _smtpPassword[0].ToString() : "N/A",
-            _smtpPassword?.Length > 0 ? _smtpPassword[_smtpPassword.Length - 1].ToString() : "N/A");
         _smtpUseSsl = bool.Parse(_configuration["Email:Smtp:UseSsl"] ?? Environment.GetEnvironmentVariable("SMTP_USE_SSL") ?? "true");
         _fromEmail = _configuration["Email:From:Address"] ?? Environment.GetEnvironmentVariable("EMAIL_FROM_ADDRESS") ?? "noreply@automais.io";
         _fromName = _configuration["Email:From:Name"] ?? Environment.GetEnvironmentVariable("EMAIL_FROM_NAME") ?? "Automais.IO";
 
-        // Log de configuração (sem expor senha)
-        _logger?.LogInformation("EmailService configurado - Host: {Host}, Port: {Port}, Username: {Username}, Password configurada: {HasPassword}, SSL: {Ssl}, From: {From}", 
+        // Apenas Debug: evita ruído no journald e não expõe dados sensíveis em Information
+        _logger?.LogDebug(
+            "SMTP configurado - Host: {Host}, Port: {Port}, User: {Username}, senha OK: {HasPassword}, SSL: {Ssl}, From: {From}",
             _smtpHost, _smtpPort, _smtpUsername, !string.IsNullOrWhiteSpace(_smtpPassword), _smtpUseSsl, _fromEmail);
-        
-        // Log de debug para verificar de onde veio cada configuração
-        _logger?.LogDebug("Configuração SMTP - Host: {Host} (de: {HostSource}), Username: {Username} (de: {UserSource}), Password: {HasPassword} (de: {PassSource})",
+
+        _logger?.LogDebug(
+            "SMTP origem - Host: {Host} ({HostSrc}), User: {User} ({UserSrc}), senha: {PassSrc}",
             _smtpHost,
-            _configuration["Email:Smtp:Host"] != null ? "appsettings" : (Environment.GetEnvironmentVariable("SMTP_HOST") != null ? "SMTP_HOST env" : "default"),
+            _configuration["Email:Smtp:Host"] != null ? "appsettings" : (Environment.GetEnvironmentVariable("SMTP_HOST") != null ? "env" : "default"),
             _smtpUsername,
-            _configuration["Email:Smtp:Username"] != null ? "appsettings" : (Environment.GetEnvironmentVariable("SMTP_USERNAME") != null ? "SMTP_USERNAME env" : "default"),
-            !string.IsNullOrWhiteSpace(_smtpPassword),
-            _configuration["Email:Smtp:Password"] != null ? "appsettings" : (Environment.GetEnvironmentVariable("SMTP_PASSWORD") != null ? "SMTP_PASSWORD env" : (Environment.GetEnvironmentVariable("EMAIL_PASSWORD") != null ? "EMAIL_PASSWORD env" : "não configurado")));
+            _configuration["Email:Smtp:Username"] != null ? "appsettings" : (Environment.GetEnvironmentVariable("SMTP_USERNAME") != null ? "env" : "default"),
+            _configuration["Email:Smtp:Password"] != null ? "appsettings" : (Environment.GetEnvironmentVariable("SMTP_PASSWORD") != null || Environment.GetEnvironmentVariable("EMAIL_PASSWORD") != null ? "env" : "não configurado"));
     }
 
     public async Task SendWelcomeEmailAsync(string toEmail, string toName, string temporaryPassword, CancellationToken cancellationToken = default)
@@ -115,8 +110,7 @@ public class EmailService : IEmailService
         try
         {
             // Log da configuração (sem expor senha)
-            _logger?.LogInformation("Tentando enviar email para {Email} via {Host}:{Port} com usuário {Username}", 
-                toEmail, _smtpHost, _smtpPort, _smtpUsername);
+            _logger?.LogDebug("Tentando enviar email para {Email} via {Host}:{Port}", toEmail, _smtpHost, _smtpPort);
 
             // Usar MailKit que tem melhor suporte para Office365 e STARTTLS
             using var client = new SmtpClient();
@@ -163,8 +157,8 @@ public class EmailService : IEmailService
             _logger?.LogError(authEx, "Erro de autenticação SMTP ao enviar email para {Email}. Mensagem: {Message}", 
                 toEmail, authEx.Message);
             
-            _logger?.LogError("Detalhes da configuração SMTP - Host: {Host}, Port: {Port}, Username: {Username}, Password Length: {PasswordLength}", 
-                _smtpHost, _smtpPort, _smtpUsername, _smtpPassword?.Length ?? 0);
+            _logger?.LogError("SMTP após falha de auth - Host: {Host}, Port: {Port}, Username: {Username}, senha definida: {HasPassword}",
+                _smtpHost, _smtpPort, _smtpUsername, !string.IsNullOrWhiteSpace(_smtpPassword));
             
             throw new InvalidOperationException($"Erro de autenticação SMTP: {authEx.Message}. Verifique as credenciais.", authEx);
         }

@@ -37,6 +37,10 @@ public class CreateTenantUserDto
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public TenantUserRole Role { get; set; } = TenantUserRole.Viewer;
+
+    /// <summary>Se true, usuário pode fazer login (Active). Se false, fica Disabled até habilitar.</summary>
+    public bool Enabled { get; set; } = true;
+
     public bool VpnEnabled { get; set; }
     public string? VpnDeviceName { get; set; }
     public string? VpnPublicKey { get; set; }

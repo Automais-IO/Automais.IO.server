@@ -103,7 +103,7 @@ public class TenantUserService : ITenantUserService
             TemporaryPassword = temporaryPassword,
             TemporaryPasswordExpiresAt = DateTime.UtcNow.AddHours(12), // Senha temporária válida por 12 horas
             Role = dto.Role,
-            Status = TenantUserStatus.Invited,
+            Status = dto.Enabled ? TenantUserStatus.Active : TenantUserStatus.Disabled,
             VpnEnabled = dto.VpnEnabled,
             VpnDeviceName = dto.VpnDeviceName,
             VpnPublicKey = dto.VpnPublicKey,
@@ -119,23 +119,26 @@ public class TenantUserService : ITenantUserService
             await SetUserNetworksAsync(created, dto.NetworkIds, cancellationToken);
         }
 
-        // Enviar e-mail de boas-vindas (falha fica registrada no usuário + log)
-        if (_emailService != null)
+        // E-mail só quando habilitado (pode fazer login); senão admin habilita depois e usa reset de senha
+        if (dto.Enabled)
         {
-            try
+            if (_emailService != null)
             {
-                await _emailService.SendWelcomeEmailAsync(created.Email, created.Name, temporaryPassword, cancellationToken);
-                await ClearEmailDeliveryFailureAsync(created, cancellationToken);
+                try
+                {
+                    await _emailService.SendWelcomeEmailAsync(created.Email, created.Name, temporaryPassword, cancellationToken);
+                    await ClearEmailDeliveryFailureAsync(created, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    await RecordEmailDeliveryFailureAsync(created, "E-mail de boas-vindas (senha temporária)", ex, cancellationToken);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                await RecordEmailDeliveryFailureAsync(created, "E-mail de boas-vindas (senha temporária)", ex, cancellationToken);
+                await RecordEmailDeliveryFailureAsync(created,
+                    "Serviço de e-mail não configurado — senha inicial não foi enviada", null, cancellationToken);
             }
-        }
-        else
-        {
-            await RecordEmailDeliveryFailureAsync(created,
-                "Serviço de e-mail não configurado — convite com senha não foi enviado", null, cancellationToken);
         }
 
         return await BuildDtoAsync(created, cancellationToken);

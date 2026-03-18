@@ -91,6 +91,42 @@ public class AuthController : ControllerBase
             return Ok(new { message = "Se o email estiver cadastrado, você receberá uma nova senha temporária em breve." });
         }
     }
+
+    /// <summary>
+    /// Define nova senha (obrigatório após login com senha temporária). Retorna novo JWT sem restrição.
+    /// </summary>
+    [HttpPost("change-password")]
+    [ProducesResponseType(typeof(LoginResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<LoginResponseDto>> ChangePassword(
+        [FromBody] ChangePasswordRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var authHeader = Request.Headers.Authorization.FirstOrDefault();
+        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            return Unauthorized(new { message = "Token ausente" });
+
+        var token = authHeader["Bearer ".Length..].Trim();
+        var userId = _authService.GetUserIdFromToken(token);
+        if (userId == null)
+            return Unauthorized(new { message = "Token inválido ou expirado" });
+
+        try
+        {
+            var result = await _authService.ChangePasswordAsync(
+                userId.Value, request.CurrentPassword, request.NewPassword, cancellationToken);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }
 
 /// <summary>

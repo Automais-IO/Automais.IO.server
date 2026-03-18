@@ -94,6 +94,10 @@ public class RoutersController : ControllerBase
                 return NotFound(new { message = $"Router com ID {id} não encontrado" });
             }
 
+            // Requisições de localhost (ex.: routeros-service) dispensam autenticação
+            if (HttpContext.IsLocalRequest())
+                return Ok(router);
+
             // Validar se o router pertence ao tenant do usuário autenticado
             var userTenantId = this.GetTenantId(_authService);
             if (!userTenantId.HasValue || router.TenantId != userTenantId.Value)

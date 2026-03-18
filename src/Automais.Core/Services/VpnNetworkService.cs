@@ -14,6 +14,7 @@ public class VpnNetworkService : IVpnNetworkService
     private readonly ITenantUserService _tenantUserService;
     private readonly WireGuardSettings _wireGuardSettings;
     private readonly IVpnServiceClient? _vpnServiceClient;
+    private readonly IRouterWireGuardService? _routerWireGuardService;
 
     public VpnNetworkService(
         ITenantRepository tenantRepository,
@@ -21,7 +22,8 @@ public class VpnNetworkService : IVpnNetworkService
         IDeviceRepository deviceRepository,
         ITenantUserService tenantUserService,
         IOptions<WireGuardSettings> wireGuardSettings,
-        IVpnServiceClient? vpnServiceClient = null)
+        IVpnServiceClient? vpnServiceClient = null,
+        IRouterWireGuardService? routerWireGuardService = null)
     {
         _tenantRepository = tenantRepository;
         _vpnNetworkRepository = vpnNetworkRepository;
@@ -29,6 +31,7 @@ public class VpnNetworkService : IVpnNetworkService
         _tenantUserService = tenantUserService;
         _wireGuardSettings = wireGuardSettings.Value;
         _vpnServiceClient = vpnServiceClient;
+        _routerWireGuardService = routerWireGuardService;
     }
 
     public async Task<IEnumerable<VpnNetworkDto>> GetByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -63,6 +66,25 @@ public class VpnNetworkService : IVpnNetworkService
             throw new InvalidOperationException($"Slug '{dto.Slug}' já está em uso para este tenant.");
         }
 
+        var serverEndpoint = !string.IsNullOrWhiteSpace(dto.ServerEndpoint)
+            ? dto.ServerEndpoint.Trim()
+            : _wireGuardSettings.DefaultServerEndpoint;
+
+        int listenPort;
+        if (dto.ListenPort.HasValue)
+        {
+            listenPort = ValidateListenPort(dto.ListenPort.Value);
+            if (!await IsListenPortAvailableAsync(serverEndpoint, listenPort, null, cancellationToken))
+            {
+                throw new InvalidOperationException(
+                    $"A porta UDP {listenPort} já está em uso por outra rede VPN no mesmo servidor ({serverEndpoint}).");
+            }
+        }
+        else
+        {
+            listenPort = await AllocateNextListenPortAsync(serverEndpoint, cancellationToken);
+        }
+
         var network = new VpnNetwork
         {
             Id = Guid.NewGuid(),
@@ -73,12 +95,8 @@ public class VpnNetworkService : IVpnNetworkService
             Description = dto.Description,
             IsDefault = dto.IsDefault,
             DnsServers = dto.DnsServers,
-            // ServerEndpoint: salva o valor que vier do frontend
-            // Se não vier nada, usa o valor padrão da configuração como fallback de segurança
-            // (mas o ideal é que o frontend sempre envie o valor)
-            ServerEndpoint = !string.IsNullOrWhiteSpace(dto.ServerEndpoint) 
-                ? dto.ServerEndpoint 
-                : _wireGuardSettings.DefaultServerEndpoint,
+            ServerEndpoint = serverEndpoint,
+            ListenPort = listenPort,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -142,9 +160,28 @@ public class VpnNetworkService : IVpnNetworkService
             network.ServerPublicKey = dto.ServerPublicKey;
         }
 
+        var listenPortChanged = false;
+        if (dto.ListenPort.HasValue && dto.ListenPort.Value != network.ListenPort)
+        {
+            var newPort = ValidateListenPort(dto.ListenPort.Value);
+            if (!await IsListenPortAvailableAsync(network.ServerEndpoint, newPort, network.Id, cancellationToken))
+            {
+                throw new InvalidOperationException(
+                    $"A porta UDP {newPort} já está em uso por outra rede VPN no mesmo servidor.");
+            }
+
+            network.ListenPort = newPort;
+            listenPortChanged = true;
+        }
+
         network.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _vpnNetworkRepository.UpdateAsync(network, cancellationToken);
+        if (listenPortChanged && _routerWireGuardService != null)
+        {
+            await _routerWireGuardService.RefreshPeerConfigsForNetworkAsync(network.Id, cancellationToken);
+        }
+
         return await MapToDtoAsync(updated, cancellationToken);
     }
 
@@ -213,11 +250,42 @@ public class VpnNetworkService : IVpnNetworkService
             IsDefault = network.IsDefault,
             DnsServers = network.DnsServers,
             ServerEndpoint = network.ServerEndpoint,
+            ListenPort = network.ListenPort > 0 ? network.ListenPort : 51820,
             UserCount = userCount,
             DeviceCount = deviceCount,
             CreatedAt = network.CreatedAt,
             UpdatedAt = network.UpdatedAt
         };
+    }
+
+    private static int ValidateListenPort(int port)
+    {
+        if (port is < 1 or > 65535)
+        {
+            throw new InvalidOperationException("ListenPort deve estar entre 1 e 65535.");
+        }
+
+        return port;
+    }
+
+    private async Task<bool> IsListenPortAvailableAsync(string? serverEndpoint, int port, Guid? excludeNetworkId, CancellationToken cancellationToken)
+    {
+        var used = await _vpnNetworkRepository.GetListenPortsForServerEndpointAsync(serverEndpoint, excludeNetworkId, cancellationToken);
+        return !used.Contains(port);
+    }
+
+    private async Task<int> AllocateNextListenPortAsync(string? serverEndpoint, CancellationToken cancellationToken)
+    {
+        var used = new HashSet<int>(await _vpnNetworkRepository.GetListenPortsForServerEndpointAsync(serverEndpoint, null, cancellationToken));
+        for (var p = 51820; p <= 65535; p++)
+        {
+            if (!used.Contains(p))
+            {
+                return p;
+            }
+        }
+
+        throw new InvalidOperationException("Não há porta UDP livre (51820–65535) para este servidor VPN.");
     }
 }
 

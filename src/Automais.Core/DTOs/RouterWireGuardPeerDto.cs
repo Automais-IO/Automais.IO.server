@@ -11,7 +11,8 @@ public class RouterWireGuardPeerDto
     public string PublicKey { get; set; } = string.Empty;
     public string AllowedIps { get; set; } = string.Empty;
     public string? Endpoint { get; set; }
-    public int? ListenPort { get; set; }
+    /// <summary>Porta UDP do servidor WireGuard (da VpnNetwork associada).</summary>
+    public int ListenPort { get; set; }
     public DateTime? LastHandshake { get; set; }
     public long? BytesReceived { get; set; }
     public long? BytesSent { get; set; }
@@ -31,7 +32,6 @@ public class CreateRouterWireGuardPeerDto
     public Guid VpnNetworkId { get; set; }
     public string AllowedIps { get; set; } = string.Empty;
     public string? Endpoint { get; set; }
-    public int? ListenPort { get; set; }
 }
 
 /// <summary>

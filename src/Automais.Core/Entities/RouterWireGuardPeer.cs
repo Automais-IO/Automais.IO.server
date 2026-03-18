@@ -39,11 +39,6 @@ public class RouterWireGuardPeer
     public string? Endpoint { get; set; }
     
     /// <summary>
-    /// Porta de escuta
-    /// </summary>
-    public int? ListenPort { get; set; }
-    
-    /// <summary>
     /// Último handshake WireGuard
     /// </summary>
     public DateTime? LastHandshake { get; set; }

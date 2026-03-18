@@ -55,12 +55,15 @@ public class VpnServersController : ControllerBase
                     name = vpn.Name,
                     cidr = vpn.Cidr,
                     server_endpoint = vpn.ServerEndpoint,
+                    listen_port = vpn.ListenPort > 0 ? vpn.ListenPort : 51820,
                     server_private_key = vpn.ServerPrivateKey,
                     server_public_key = vpn.ServerPublicKey,
                     dns_servers = vpn.DnsServers,
                     tenant_id = vpn.TenantId.ToString()
                 })
                 .ToList();
+
+            var vpnPortById = vpnNetworks.ToDictionary(v => v.id, v => v.listen_port);
 
             // Buscar todos os Routers que pertencem às VpnNetworks deste servidor
             var vpnNetworkIds = vpnNetworks.Select(v => Guid.Parse(v.id)).ToList();
@@ -85,7 +88,7 @@ public class VpnServersController : ControllerBase
                         public_key = p.PublicKey,
                         allowed_ips = p.AllowedIps,
                         endpoint = p.Endpoint,
-                        listen_port = p.ListenPort,
+                        listen_port = vpnPortById.GetValueOrDefault(p.VpnNetworkId.ToString(), 51820),
                         is_enabled = p.IsEnabled
                     })
                     .ToList();

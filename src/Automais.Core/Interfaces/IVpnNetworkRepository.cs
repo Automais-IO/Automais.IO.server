@@ -20,6 +20,8 @@ public interface IVpnNetworkRepository
     Task<int> CountMembershipsByNetworkIdAsync(Guid networkId, CancellationToken cancellationToken = default);
     Task ReplaceUserMembershipsAsync(Guid tenantId, Guid userId, IEnumerable<Guid> networkIds, CancellationToken cancellationToken = default);
     Task RemoveMembershipsByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>Portas UDP já usadas por redes com o mesmo ServerEndpoint (case-insensitive).</summary>
+    Task<IReadOnlyList<int>> GetListenPortsForServerEndpointAsync(string? serverEndpoint, Guid? excludeNetworkId, CancellationToken cancellationToken = default);
 }
 
 

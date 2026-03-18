@@ -167,6 +167,21 @@ public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
 
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<int>> GetListenPortsForServerEndpointAsync(string? serverEndpoint, Guid? excludeNetworkId, CancellationToken cancellationToken = default)
+    {
+        var norm = string.IsNullOrWhiteSpace(serverEndpoint) ? "" : serverEndpoint.Trim().ToLowerInvariant();
+        lock (_lock)
+        {
+            var ports = _networks
+                .Where(n =>
+                    (string.IsNullOrWhiteSpace(n.ServerEndpoint) ? "" : n.ServerEndpoint.Trim().ToLowerInvariant()) == norm
+                    && (!excludeNetworkId.HasValue || n.Id != excludeNetworkId.Value))
+                .Select(n => n.ListenPort > 0 ? n.ListenPort : 51820)
+                .ToList();
+            return Task.FromResult<IReadOnlyList<int>>(ports);
+        }
+    }
 }
 
 

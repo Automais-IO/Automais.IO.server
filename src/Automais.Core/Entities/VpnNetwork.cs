@@ -33,6 +33,12 @@ public class VpnNetwork
     /// O serviço Python usa este valor para identificar quais VpnNetworks ele deve gerenciar.
     /// </summary>
     public string? ServerEndpoint { get; set; }
+
+    /// <summary>
+    /// Porta UDP da interface WireGuard desta rede no servidor VPN.
+    /// Deve ser única entre todas as VpnNetworks com o mesmo ServerEndpoint (mesma máquina).
+    /// </summary>
+    public int ListenPort { get; set; } = 51820;
     
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

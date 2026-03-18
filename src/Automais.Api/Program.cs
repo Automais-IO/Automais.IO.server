@@ -332,18 +332,6 @@ builder.Services.AddHttpClient<Automais.Core.Interfaces.IRouterOsServiceClient, 
 // Registrar cliente WebSocket RouterOS
 builder.Services.AddScoped<Automais.Core.Interfaces.IRouterOsWebSocketClient, Automais.Infrastructure.Services.RouterOsWebSocketClient>();
 
-builder.Services.AddScoped<IVpnNetworkService>(sp =>
-{
-    var tenantRepo = sp.GetRequiredService<ITenantRepository>();
-    var vpnNetworkRepo = sp.GetRequiredService<IVpnNetworkRepository>();
-    var deviceRepo = sp.GetRequiredService<IDeviceRepository>();
-    var tenantUserService = sp.GetRequiredService<ITenantUserService>();
-    var wireGuardSettings = sp.GetRequiredService<IOptions<WireGuardSettings>>();
-    var vpnServiceClient = sp.GetService<Automais.Core.Interfaces.IVpnServiceClient>(); // Opcional
-    return new VpnNetworkService(tenantRepo, vpnNetworkRepo, deviceRepo, tenantUserService, wireGuardSettings, vpnServiceClient);
-});
-
-// Registrar RouterWireGuardService primeiro para poder injetar no RouterService
 builder.Services.AddScoped<IRouterWireGuardService>(sp =>
 {
     var peerRepo = sp.GetRequiredService<IRouterWireGuardPeerRepository>();
@@ -353,6 +341,18 @@ builder.Services.AddScoped<IRouterWireGuardService>(sp =>
     var wireGuardSettings = sp.GetRequiredService<IOptions<WireGuardSettings>>();
     var logger = sp.GetService<ILogger<Automais.Core.Services.RouterWireGuardService>>();
     return new Automais.Core.Services.RouterWireGuardService(peerRepo, routerRepo, vpnNetworkRepo, wireGuardSettings, vpnServiceClient, logger);
+});
+
+builder.Services.AddScoped<IVpnNetworkService>(sp =>
+{
+    var tenantRepo = sp.GetRequiredService<ITenantRepository>();
+    var vpnNetworkRepo = sp.GetRequiredService<IVpnNetworkRepository>();
+    var deviceRepo = sp.GetRequiredService<IDeviceRepository>();
+    var tenantUserService = sp.GetRequiredService<ITenantUserService>();
+    var wireGuardSettings = sp.GetRequiredService<IOptions<WireGuardSettings>>();
+    var vpnServiceClient = sp.GetService<Automais.Core.Interfaces.IVpnServiceClient>();
+    var routerWg = sp.GetRequiredService<IRouterWireGuardService>();
+    return new VpnNetworkService(tenantRepo, vpnNetworkRepo, deviceRepo, tenantUserService, wireGuardSettings, vpnServiceClient, routerWg);
 });
 
 // Registrar RouterService com RouterWireGuardService como dependência opcional

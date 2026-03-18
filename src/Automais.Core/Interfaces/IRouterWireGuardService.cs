@@ -15,5 +15,7 @@ public interface IRouterWireGuardService
     Task DeletePeerAsync(Guid id, CancellationToken cancellationToken = default);
     Task<RouterWireGuardConfigDto> GetConfigAsync(Guid id, CancellationToken cancellationToken = default);
     Task<RouterWireGuardPeerDto> RegenerateKeysAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <summary>Regenera ConfigContent de todos os peers da rede (ex.: após mudar ListenPort).</summary>
+    Task RefreshPeerConfigsForNetworkAsync(Guid vpnNetworkId, CancellationToken cancellationToken = default);
 }
 

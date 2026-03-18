@@ -146,8 +146,7 @@ public class RouterService : IRouterService
                 var peerDto = new CreateRouterWireGuardPeerDto
                 {
                     VpnNetworkId = created.VpnNetworkId.Value,
-                    AllowedIps = allowedIps,
-                    ListenPort = 51820 // Porta padrão do WireGuard
+                    AllowedIps = allowedIps
                 };
                 
                 await _wireGuardService.CreatePeerAsync(created.Id, peerDto, cancellationToken);

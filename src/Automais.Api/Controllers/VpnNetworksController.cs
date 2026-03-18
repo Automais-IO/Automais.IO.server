@@ -134,6 +134,11 @@ public class VpnNetworksController : ControllerBase
             _logger.LogWarning(ex, "Rede VPN não encontrada para atualização");
             return NotFound(new { message = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Validação ao atualizar rede VPN");
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpDelete("vpn/networks/{id:guid}")]

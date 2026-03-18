@@ -15,6 +15,8 @@ public class VpnNetworkDto
     /// O frontend deve sempre enviar este valor (preenchido com "automais.io" por padrão, mas editável).
     /// </summary>
     public string? ServerEndpoint { get; set; }
+    /// <summary>Porta UDP WireGuard no servidor (única por ServerEndpoint).</summary>
+    public int ListenPort { get; set; }
     public int UserCount { get; set; }
     public int DeviceCount { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -34,6 +36,8 @@ public class CreateVpnNetworkDto
     /// O frontend deve sempre enviar este valor (preenchido com "automais.io" por padrão, mas editável).
     /// </summary>
     public string? ServerEndpoint { get; set; }
+    /// <summary>Se omitido, aloca automaticamente a próxima porta livre no mesmo ServerEndpoint.</summary>
+    public int? ListenPort { get; set; }
 }
 
 public class UpdateVpnNetworkDto
@@ -52,6 +56,8 @@ public class UpdateVpnNetworkDto
     /// ou manualmente se o servidor for externo.
     /// </summary>
     public string? ServerPublicKey { get; set; }
+    /// <summary>Alterar exige porta livre entre redes com o mesmo ServerEndpoint.</summary>
+    public int? ListenPort { get; set; }
 }
 
 

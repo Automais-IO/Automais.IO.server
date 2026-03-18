@@ -144,6 +144,20 @@ public class VpnNetworkRepository : IVpnNetworkRepository
         _context.VpnNetworkMemberships.RemoveRange(memberships);
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<int>> GetListenPortsForServerEndpointAsync(string? serverEndpoint, Guid? excludeNetworkId, CancellationToken cancellationToken = default)
+    {
+        var norm = NormalizeServerEndpoint(serverEndpoint);
+        var list = await _context.VpnNetworks.AsNoTracking().ToListAsync(cancellationToken);
+        return list
+            .Where(n => NormalizeServerEndpoint(n.ServerEndpoint) == norm
+                && (!excludeNetworkId.HasValue || n.Id != excludeNetworkId.Value))
+            .Select(n => n.ListenPort)
+            .ToList();
+    }
+
+    private static string NormalizeServerEndpoint(string? s) =>
+        string.IsNullOrWhiteSpace(s) ? "" : s.Trim().ToLowerInvariant();
 }
 
 

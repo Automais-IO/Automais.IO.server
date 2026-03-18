@@ -159,7 +159,6 @@ public class RouterWireGuardService : IRouterWireGuardService
             PrivateKey = privateKey,
             AllowedIps = allowedIps,
             Endpoint = vpnNetwork.ServerEndpoint, // Endpoint vem da VpnNetwork
-            ListenPort = dto.ListenPort ?? 51820,
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -169,8 +168,7 @@ public class RouterWireGuardService : IRouterWireGuardService
         peer.ConfigContent = GenerateRouterConfig(router, peer, vpnNetwork);
 
         var created = await _peerRepository.CreateAsync(peer, cancellationToken);
-        
-        
+        created.VpnNetwork = vpnNetwork;
         return MapToDto(created);
     }
 
@@ -186,11 +184,11 @@ public class RouterWireGuardService : IRouterWireGuardService
         var normalizedAllowedIps = NormalizeAllowedIps(dto.AllowedIps);
         peer.AllowedIps = normalizedAllowedIps;
         
-        // Endpoint não é atualizado aqui - ele vem da VpnNetwork
-        peer.ListenPort = dto.ListenPort;
+        // Endpoint e ListenPort vêm da VpnNetwork
         peer.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _peerRepository.UpdateAsync(peer, cancellationToken);
+        updated.VpnNetwork = await _vpnNetworkRepository.GetByIdAsync(peer.VpnNetworkId, cancellationToken);
         return MapToDto(updated);
     }
 
@@ -335,9 +333,32 @@ public class RouterWireGuardService : IRouterWireGuardService
             "Isso garantirá que as chaves sejam geradas corretamente usando 'wg genkey' do sistema Linux.");
     }
 
+    public async Task RefreshPeerConfigsForNetworkAsync(Guid vpnNetworkId, CancellationToken cancellationToken = default)
+    {
+        var vpnNetwork = await _vpnNetworkRepository.GetByIdAsync(vpnNetworkId, cancellationToken);
+        if (vpnNetwork == null)
+        {
+            return;
+        }
+
+        var peers = await _peerRepository.GetByVpnNetworkIdAsync(vpnNetworkId, cancellationToken);
+        foreach (var peer in peers)
+        {
+            var router = await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
+            if (router == null)
+            {
+                continue;
+            }
+
+            peer.ConfigContent = GenerateRouterConfig(router, peer, vpnNetwork);
+            peer.UpdatedAt = DateTime.UtcNow;
+            await _peerRepository.UpdateAsync(peer, cancellationToken);
+        }
+    }
 
     private static RouterWireGuardPeerDto MapToDto(RouterWireGuardPeer peer)
     {
+        var listenPort = peer.VpnNetwork?.ListenPort > 0 ? peer.VpnNetwork.ListenPort : 51820;
         return new RouterWireGuardPeerDto
         {
             Id = peer.Id,
@@ -346,7 +367,7 @@ public class RouterWireGuardService : IRouterWireGuardService
             PublicKey = peer.PublicKey,
             AllowedIps = peer.AllowedIps,
             Endpoint = peer.Endpoint,
-            ListenPort = peer.ListenPort,
+            ListenPort = listenPort,
             LastHandshake = peer.LastHandshake,
             BytesReceived = peer.BytesReceived,
             BytesSent = peer.BytesSent,
@@ -617,7 +638,7 @@ public class RouterWireGuardService : IRouterWireGuardService
         
         var serverEndpoint = vpnNetwork.ServerEndpoint ?? "automais.io";
         var serverPublicKey = (vpnNetwork.ServerPublicKey ?? "").Trim();
-        var listenPort = peer.ListenPort ?? 51820;
+        var listenPort = vpnNetwork.ListenPort > 0 ? vpnNetwork.ListenPort : 51820;
 
         var configLines = new List<string>
         {

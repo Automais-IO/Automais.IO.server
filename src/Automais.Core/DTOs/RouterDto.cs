@@ -14,17 +14,12 @@ public class RouterDto
     public string? Model { get; set; }
     public string? FirmwareVersion { get; set; }
     public string? RouterOsApiUrl { get; set; }
-    public string? RouterOsApiUsername { get; set; }
-    /// <summary>
-    /// Senha original do RouterOS (fornecida pelo usuário).
-    /// Usada apenas quando AutomaisApiPassword é null (primeira conexão).
-    /// </summary>
-    public string? RouterOsApiPassword { get; set; }
-    /// <summary>
-    /// Senha do usuário automais-io-api (senha forte gerada automaticamente).
-    /// Se nulo, significa que ainda não foi alterada e deve usar RouterOsApiPassword.
-    /// </summary>
-    public string? AutomaisApiPassword { get; set; }
+    /// <summary>Usuário da API RouterOS no MikroTik.</summary>
+    public string? ApiUsername { get; set; }
+    /// <summary>Senha temporária (ex.: .rsc); após primeiro login bem-sucedido o serviço grava <see cref="ApiPassword"/> e limpa esta.</summary>
+    public string? ApiPasswordTemporaria { get; set; }
+    /// <summary>Senha definitiva da API (após rotação ou já cadastrada).</summary>
+    public string? ApiPassword { get; set; }
     public Guid? VpnNetworkId { get; set; }
     /// <summary>
     /// Endpoint do servidor VPN associado (ex: "automais.io").
@@ -104,8 +99,8 @@ public class UpdateRouterDto
     [Obsolete("Model não pode ser editado manualmente")]
     public string? Model { get; set; }
     public string? RouterOsApiUrl { get; set; }
-    public string? RouterOsApiUsername { get; set; }
-    public string? RouterOsApiPassword { get; set; }
+    public string? ApiUsername { get; set; }
+    public string? ApiPasswordTemporaria { get; set; }
     public Guid? VpnNetworkId { get; set; }
     public RouterStatus? Status { get; set; }
     public RouterOsApiAuthStatus? RouterOsApiAuthStatus { get; set; }

@@ -83,7 +83,7 @@ public class RouterService : IRouterService
         return await MapToDtoAsync(router, cancellationToken);
     }
 
-    public async Task<RouterDto> CreateAsync(Guid tenantId, CreateRouterDto dto, string routerOsApiUsername, string routerOsApiPassword, CancellationToken cancellationToken = default)
+    public async Task<RouterDto> CreateAsync(Guid tenantId, CreateRouterDto dto, string apiUsername, string apiPasswordTemporaria, CancellationToken cancellationToken = default)
     {
         var tenant = await _tenantRepository.GetByIdAsync(tenantId, cancellationToken);
         if (tenant == null)
@@ -108,8 +108,8 @@ public class RouterService : IRouterService
             Model = null,
             FirmwareVersion = null,
             RouterOsApiUrl = null,
-            RouterOsApiUsername = routerOsApiUsername,
-            RouterOsApiPassword = routerOsApiPassword, // TODO: Criptografar senha
+            ApiUsername = apiUsername,
+            ApiPasswordTemporaria = apiPasswordTemporaria,
             VpnNetworkId = dto.VpnNetworkId,
             Description = dto.Description,
             Status = RouterStatus.Offline,
@@ -211,15 +211,11 @@ public class RouterService : IRouterService
             router.RouterOsApiUrl = dto.RouterOsApiUrl;
         }
 
-        if (dto.RouterOsApiUsername != null)
-        {
-            router.RouterOsApiUsername = dto.RouterOsApiUsername;
-        }
+        if (dto.ApiUsername != null)
+            router.ApiUsername = dto.ApiUsername;
 
-        if (dto.RouterOsApiPassword != null)
-        {
-            router.RouterOsApiPassword = dto.RouterOsApiPassword; // TODO: Criptografar senha
-        }
+        if (dto.ApiPasswordTemporaria != null)
+            router.ApiPasswordTemporaria = dto.ApiPasswordTemporaria;
 
         if (dto.VpnNetworkId.HasValue)
         {
@@ -407,9 +403,9 @@ public class RouterService : IRouterService
             Model = router.Model,
             FirmwareVersion = router.FirmwareVersion,
             RouterOsApiUrl = router.RouterOsApiUrl,
-            RouterOsApiUsername = router.RouterOsApiUsername,
-            RouterOsApiPassword = router.RouterOsApiPassword, // Incluir para o serviço Python usar quando AutomaisApiPassword for null
-            AutomaisApiPassword = router.AutomaisApiPassword, // Incluir para o serviço Python verificar
+            ApiUsername = router.ApiUsername,
+            ApiPasswordTemporaria = router.ApiPasswordTemporaria,
+            ApiPassword = router.ApiPassword,
             VpnNetworkId = router.VpnNetworkId,
             VpnNetworkServerEndpoint = vpnNetworkServerEndpoint,
             Status = router.Status,
@@ -460,10 +456,8 @@ public class RouterService : IRouterService
             throw new KeyNotFoundException($"Router com ID {id} não encontrado");
         }
 
-        // Lógica: RouterOsApiPassword -> NULL, AutomaisApiPassword -> nova senha
-        // Isso indica que a senha foi alterada e agora usamos AutomaisApiPassword
-        router.RouterOsApiPassword = null; // Limpar senha original
-        router.AutomaisApiPassword = newPassword; // TODO: Criptografar senha
+        router.ApiPasswordTemporaria = null;
+        router.ApiPassword = newPassword;
         router.UpdatedAt = DateTime.UtcNow;
 
         await _routerRepository.UpdateAsync(router, cancellationToken);

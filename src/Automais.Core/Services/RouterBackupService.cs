@@ -48,9 +48,10 @@ public class RouterBackupService : IRouterBackupService
             throw new KeyNotFoundException($"Router com ID {routerId} não encontrado.");
         }
 
+        var hasApiPwd = !string.IsNullOrWhiteSpace(router.ApiPassword) || !string.IsNullOrWhiteSpace(router.ApiPasswordTemporaria);
         if (string.IsNullOrWhiteSpace(router.RouterOsApiUrl) ||
-            string.IsNullOrWhiteSpace(router.RouterOsApiUsername) ||
-            string.IsNullOrWhiteSpace(router.RouterOsApiPassword))
+            string.IsNullOrWhiteSpace(router.ApiUsername) ||
+            !hasApiPwd)
         {
             throw new InvalidOperationException("Credenciais da API RouterOS não configuradas.");
         }

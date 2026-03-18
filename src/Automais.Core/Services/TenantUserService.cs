@@ -3,25 +3,31 @@ using System.Text;
 using Automais.Core.DTOs;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace Automais.Core.Services;
 
 public class TenantUserService : ITenantUserService
 {
+    private const int MaxEmailFailureMessageLength = 2000;
+
     private readonly ITenantRepository _tenantRepository;
     private readonly ITenantUserRepository _userRepository;
     private readonly IVpnNetworkRepository _vpnNetworkRepository;
     private readonly IEmailService? _emailService;
+    private readonly ILogger<TenantUserService> _logger;
 
     public TenantUserService(
         ITenantRepository tenantRepository,
         ITenantUserRepository userRepository,
         IVpnNetworkRepository vpnNetworkRepository,
+        ILogger<TenantUserService> logger,
         IEmailService? emailService = null)
     {
         _tenantRepository = tenantRepository;
         _userRepository = userRepository;
         _vpnNetworkRepository = vpnNetworkRepository;
+        _logger = logger;
         _emailService = emailService;
     }
 
@@ -113,18 +119,23 @@ public class TenantUserService : ITenantUserService
             await SetUserNetworksAsync(created, dto.NetworkIds, cancellationToken);
         }
 
-        // Enviar email de boas-vindas
+        // Enviar e-mail de boas-vindas (falha fica registrada no usuário + log)
         if (_emailService != null)
         {
             try
             {
                 await _emailService.SendWelcomeEmailAsync(created.Email, created.Name, temporaryPassword, cancellationToken);
+                await ClearEmailDeliveryFailureAsync(created, cancellationToken);
             }
             catch (Exception ex)
             {
-                // Log erro mas não falha a criação do usuário
-                System.Diagnostics.Debug.WriteLine($"Erro ao enviar email de boas-vindas: {ex.Message}");
+                await RecordEmailDeliveryFailureAsync(created, "E-mail de boas-vindas (senha temporária)", ex, cancellationToken);
             }
+        }
+        else
+        {
+            await RecordEmailDeliveryFailureAsync(created,
+                "Serviço de e-mail não configurado — convite com senha não foi enviado", null, cancellationToken);
         }
 
         return await BuildDtoAsync(created, cancellationToken);
@@ -233,21 +244,23 @@ public class TenantUserService : ITenantUserService
 
         await _userRepository.UpdateAsync(user, cancellationToken);
 
-        // Enviar email com nova senha (não falha o reset se o envio falhar)
         if (_emailService != null)
         {
             try
             {
                 await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name, temporaryPassword, cancellationToken);
+                await ClearEmailDeliveryFailureAsync(user, cancellationToken);
                 return new ResetPasswordResultDto { EmailSent = true };
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Erro ao enviar email de reset de senha: {ex.Message}");
+                await RecordEmailDeliveryFailureAsync(user, "E-mail de reset de senha", ex, cancellationToken);
                 return new ResetPasswordResultDto { EmailSent = false };
             }
         }
 
+        await RecordEmailDeliveryFailureAsync(user,
+            "Serviço de e-mail não configurado — nova senha não foi enviada", null, cancellationToken);
         return new ResetPasswordResultDto { EmailSent = false };
     }
 
@@ -277,10 +290,22 @@ public class TenantUserService : ITenantUserService
 
         await _userRepository.UpdateAsync(user, cancellationToken);
 
-        // Enviar email com nova senha
         if (_emailService != null)
         {
-            await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name, temporaryPassword, cancellationToken);
+            try
+            {
+                await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name, temporaryPassword, cancellationToken);
+                await ClearEmailDeliveryFailureAsync(user, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await RecordEmailDeliveryFailureAsync(user, "E-mail de recuperação de senha (esqueci senha)", ex, cancellationToken);
+            }
+        }
+        else
+        {
+            await RecordEmailDeliveryFailureAsync(user,
+                "Serviço de e-mail não configurado — recuperação de senha não enviada", null, cancellationToken);
         }
     }
 
@@ -396,8 +421,43 @@ public class TenantUserService : ITenantUserService
                 Cidr = n.Cidr
             }),
             CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
+            UpdatedAt = user.UpdatedAt,
+            EmailDeliveryFailedAt = user.EmailDeliveryFailedAt,
+            EmailDeliveryFailureMessage = user.EmailDeliveryFailureMessage
         };
+    }
+
+    private async Task RecordEmailDeliveryFailureAsync(TenantUser user, string context, Exception? ex,
+        CancellationToken cancellationToken)
+    {
+        var detail = ex != null ? ex.Message : string.Empty;
+        var full = string.IsNullOrWhiteSpace(detail) ? context : $"{context}: {detail}";
+        if (full.Length > MaxEmailFailureMessageLength)
+            full = full[..(MaxEmailFailureMessageLength - 3)] + "...";
+
+        user.EmailDeliveryFailedAt = DateTime.UtcNow;
+        user.EmailDeliveryFailureMessage = full;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _userRepository.UpdateAsync(user, cancellationToken);
+
+        if (ex != null)
+            _logger.LogWarning(ex,
+                "Falha SMTP/e-mail ({Context}) para usuário {UserId} ({Email})",
+                context, user.Id, user.Email);
+        else
+            _logger.LogWarning(
+                "Falha de e-mail ({Context}) para usuário {UserId} ({Email})",
+                context, user.Id, user.Email);
+    }
+
+    private async Task ClearEmailDeliveryFailureAsync(TenantUser user, CancellationToken cancellationToken)
+    {
+        if (user.EmailDeliveryFailedAt == null && string.IsNullOrEmpty(user.EmailDeliveryFailureMessage))
+            return;
+        user.EmailDeliveryFailedAt = null;
+        user.EmailDeliveryFailureMessage = null;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _userRepository.UpdateAsync(user, cancellationToken);
     }
 }
 

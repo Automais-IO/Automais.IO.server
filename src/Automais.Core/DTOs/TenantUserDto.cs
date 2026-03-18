@@ -18,6 +18,11 @@ public class TenantUserDto
     public IEnumerable<VpnNetworkSummaryDto> Networks { get; set; } = Enumerable.Empty<VpnNetworkSummaryDto>();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>Indica falha recente ao enviar e-mail ao usuário (boas-vindas ou senha).</summary>
+    public DateTime? EmailDeliveryFailedAt { get; set; }
+
+    public string? EmailDeliveryFailureMessage { get; set; }
 }
 
 public class VpnNetworkSummaryDto

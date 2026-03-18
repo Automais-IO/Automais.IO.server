@@ -23,6 +23,12 @@ public class TenantUser
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    /// <summary>Quando a última tentativa de envio de e-mail (boas-vindas ou reset) falhou.</summary>
+    public DateTime? EmailDeliveryFailedAt { get; set; }
+
+    /// <summary>Resumo do erro SMTP ou motivo (ex.: serviço não configurado).</summary>
+    public string? EmailDeliveryFailureMessage { get; set; }
+
     // Navigation properties
     public Tenant Tenant { get; set; } = null!;
     public ICollection<VpnNetworkMembership> VpnMemberships { get; set; } = new List<VpnNetworkMembership>();

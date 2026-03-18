@@ -155,6 +155,9 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
 
+            entity.Property(e => e.EmailDeliveryFailureMessage)
+                .HasMaxLength(2000);
+
             entity.HasOne(e => e.Tenant)
                 .WithMany(t => t.Users)
                 .HasForeignKey(e => e.TenantId)

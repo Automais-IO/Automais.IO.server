@@ -147,8 +147,8 @@ public class RouterOsServiceClient : IRouterOsServiceClient
         };
 
         _logger.LogInformation(
-            "Chamando serviço RouterOS para adicionar rota: Router={RouterId}, Route={RouteId}, Destination={Destination}, Gateway={Gateway}",
-            routerId, route.Id, route.Destination, route.Gateway);
+            "[Router API] Tentativa de acesso ao router via API: RouterId={RouterId}, operação=AdicionarRota, Destination={Destination}, Gateway={Gateway}",
+            routerId, route.Destination, route.Gateway);
 
         try
         {
@@ -182,21 +182,26 @@ public class RouterOsServiceClient : IRouterOsServiceClient
                     // Retornar gateway usado pelo RouterOS (pode ser IP ou nome de interface quando gateway estava vazio)
                     var gatewayUsed = result.GatewayUsed ?? string.Empty;
                     _logger.LogInformation(
-                        "Rota adicionada no RouterOS. Success={Success}, RouterOsId={RouterOsId}, GatewayUsed='{GatewayUsed}' (tipo: {Type})", 
-                        result.Success, result.RouterOsId, gatewayUsed, gatewayUsed?.GetType().Name ?? "null");
+                        "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=AdicionarRota, sucesso=Sim, RouterOsId={RouterOsId}, GatewayUsed='{GatewayUsed}'",
+                        routerId, result.RouterOsId, gatewayUsed);
                     return (true, gatewayUsed);
                 }
                 _logger.LogWarning(
-                    "Resposta do RouterOS não foi bem-sucedida. Success={Success}", 
-                    result?.Success ?? false);
+                    "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=AdicionarRota, sucesso=Não, mensagem=Resposta do serviço não indicou sucesso",
+                    routerId);
                 return (false, null);
             }
 
+            _logger.LogWarning(
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=AdicionarRota, sucesso=Não, statusHTTP={StatusCode}",
+                routerId, response?.StatusCode);
             return (false, null);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Erro ao chamar serviço RouterOS para adicionar rota");
+            _logger.LogError(ex,
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=AdicionarRota, sucesso=Não, erro={Error}",
+                routerId, ex.Message);
             return (false, null);
         }
     }
@@ -213,7 +218,7 @@ public class RouterOsServiceClient : IRouterOsServiceClient
         };
 
         _logger.LogInformation(
-            "Chamando serviço RouterOS para remover rota: Router={RouterId}, RouterOsRouteId={RouterOsRouteId}",
+            "[Router API] Tentativa de acesso ao router via API: RouterId={RouterId}, operação=RemoverRota, RouterOsRouteId={RouterOsRouteId}",
             routerId, routerOsRouteId);
 
         try
@@ -231,14 +236,23 @@ public class RouterOsServiceClient : IRouterOsServiceClient
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<RouteOperationResponse>(cancellationToken: cancellationToken);
-                return result?.Success ?? false;
+                var success = result?.Success ?? false;
+                _logger.LogInformation(
+                    "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=RemoverRota, sucesso={Result}",
+                    routerId, success ? "Sim" : "Não");
+                return success;
             }
 
+            _logger.LogWarning(
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=RemoverRota, sucesso=Não, statusHTTP={StatusCode}",
+                routerId, response.StatusCode);
             return false;
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Erro ao chamar serviço RouterOS para remover rota");
+            _logger.LogError(ex,
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=RemoverRota, sucesso=Não, erro={Error}",
+                routerId, ex.Message);
             return false;
         }
     }
@@ -247,7 +261,9 @@ public class RouterOsServiceClient : IRouterOsServiceClient
         Guid routerId,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Chamando serviço RouterOS para listar interfaces WireGuard: Router={RouterId}", routerId);
+        _logger.LogInformation(
+            "[Router API] Tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard",
+            routerId);
 
         try
         {
@@ -263,6 +279,9 @@ public class RouterOsServiceClient : IRouterOsServiceClient
                 var result = await response.Content.ReadFromJsonAsync<WireGuardInterfacesResponse>(cancellationToken: cancellationToken);
                 if (result?.Success == true && result.Interfaces != null)
                 {
+                    _logger.LogInformation(
+                        "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard, sucesso=Sim, quantidade={Count}",
+                        routerId, result.Interfaces.Count);
                     return result.Interfaces.Select(i => new RouterOsWireGuardInterfaceDto
                     {
                         Name = i.Name ?? string.Empty,
@@ -275,11 +294,16 @@ public class RouterOsServiceClient : IRouterOsServiceClient
                 }
             }
 
+            _logger.LogWarning(
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard, sucesso=Não, statusHTTP={StatusCode}",
+                routerId, response?.StatusCode);
             return new List<RouterOsWireGuardInterfaceDto>();
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Erro ao chamar serviço RouterOS para listar interfaces WireGuard");
+            _logger.LogError(ex,
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard, sucesso=Não, erro={Error}",
+                routerId, ex.Message);
             return new List<RouterOsWireGuardInterfaceDto>();
         }
     }

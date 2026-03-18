@@ -220,13 +220,16 @@ public class RoutersController : ControllerBase
         try
         {
             // Log detalhado do que foi recebido
-            _logger.LogInformation($"📥 [API] Recebida requisição PUT para atualizar router {id}");
-            _logger.LogInformation($"   Status: {dto.Status}");
-            _logger.LogInformation($"   LastSeenAt: {dto.LastSeenAt}");
-            _logger.LogInformation($"   Latency: {dto.Latency}");
-            _logger.LogInformation($"   HardwareInfo: {(dto.HardwareInfo != null ? $"presente ({dto.HardwareInfo.Length} chars)" : "null")}");
-            _logger.LogInformation($"   FirmwareVersion: {dto.FirmwareVersion}");
-            _logger.LogInformation($"   Model: {dto.Model}");
+            _logger.LogInformation("📥 [API] Recebida requisição PUT para atualizar router {RouterId}", id);
+            _logger.LogInformation("   Status: {Status}, LastSeenAt: {LastSeenAt}, Latency: {Latency}", dto.Status, dto.LastSeenAt, dto.Latency);
+            _logger.LogInformation("   HardwareInfo: {HardwareInfo}, FirmwareVersion: {FirmwareVersion}, Model: {Model}",
+                dto.HardwareInfo != null ? $"presente ({dto.HardwareInfo.Length} chars)" : "null", dto.FirmwareVersion, dto.Model);
+            if (dto.RouterOsApiAuthStatus.HasValue || dto.RouterOsApiAuthCheckedAt.HasValue || dto.RouterOsApiAuthMessage != null)
+            {
+                _logger.LogInformation(
+                    "   [Router API] Atualização de status da API RouterOS recebida: RouterOsApiAuthStatus={Status}, RouterOsApiAuthCheckedAt={CheckedAt}, RouterOsApiAuthMessage={Message}",
+                    dto.RouterOsApiAuthStatus, dto.RouterOsApiAuthCheckedAt, dto.RouterOsApiAuthMessage ?? "(nula)");
+            }
             
             // Log do JSON completo recebido
             try

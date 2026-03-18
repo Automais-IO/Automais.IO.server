@@ -231,7 +231,7 @@ public class RouterService : IRouterService
         if (dto.RouterOsApiAuthStatus.HasValue)
         {
             router.RouterOsApiAuthStatus = dto.RouterOsApiAuthStatus.Value;
-            _logger?.LogDebug($"✅ RouterOsApiAuthStatus atualizado para {router.RouterOsApiAuthStatus}");
+            _logger?.LogDebug("Router {RouterId}: RouterOsApiAuthStatus atualizado para {Status}", id, router.RouterOsApiAuthStatus);
         }
 
         if (dto.RouterOsApiAuthCheckedAt.HasValue)
@@ -246,6 +246,14 @@ public class RouterService : IRouterService
                 : dto.RouterOsApiAuthMessage.Length > 500
                     ? dto.RouterOsApiAuthMessage[..500]
                     : dto.RouterOsApiAuthMessage;
+        }
+
+        // Log consolidado quando a tabela router for atualizada com informações de última conexão/resultado da API RouterOS
+        if (dto.RouterOsApiAuthStatus.HasValue || dto.RouterOsApiAuthCheckedAt.HasValue || dto.RouterOsApiAuthMessage != null)
+        {
+            _logger?.LogInformation(
+                "Router {RouterId}: tabela router atualizada com informações de acesso à API RouterOS — Status={Status}, VerificadoEm={CheckedAt}, Mensagem={Message}",
+                id, router.RouterOsApiAuthStatus, router.RouterOsApiAuthCheckedAt, router.RouterOsApiAuthMessage ?? "(nula)");
         }
 
         if (dto.LastSeenAt.HasValue)

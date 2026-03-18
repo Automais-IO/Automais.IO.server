@@ -305,26 +305,23 @@ public class RouterOsClient : IRouterOsClient
             }
 
             var (host, port) = ParseApiUrl(apiUrl);
-            _logger?.LogDebug("Testando conexão RouterOS: {Host}:{Port} (timeout: {Timeout}s)", host, port, timeoutSeconds);
+            _logger?.LogInformation("[Router API] Tentativa de acesso ao router via API: Host={Host}, Porta={Port}, operação=TestarConexão", host, port);
 
             // Executar em thread separada para não travar a API
-            return await Task.Run(async () =>
+            var result = await Task.Run(async () =>
             {
                 ITikConnection? connection = null;
                 try
                 {
                     connection = CreateConnection(apiUrl, username, password);
-                    
-                    // Testar conexão executando um comando simples
                     var cmd = connection.CreateCommand("/system/identity/print");
                     cmd.ExecuteScalar();
-                    
-                    _logger?.LogInformation("✅ Conexão RouterOS bem-sucedida para {Username} em {Host}:{Port}", username, host, port);
+                    _logger?.LogInformation("[Router API] Resultado da tentativa de acesso ao router via API: Host={Host}:{Port}, operação=TestarConexão, sucesso=Sim", host, port);
                     return true;
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogWarning(ex, "❌ Falha ao conectar RouterOS {Host}:{Port}: {Error}", host, port, ex.Message);
+                    _logger?.LogWarning(ex, "[Router API] Resultado da tentativa de acesso ao router via API: Host={Host}:{Port}, operação=TestarConexão, sucesso=Não, erro={Error}", host, port, ex.Message);
                     return false;
                 }
                 finally
@@ -332,15 +329,16 @@ public class RouterOsClient : IRouterOsClient
                     SafeCloseConnection(connection);
                 }
             }, cancellationToken).WaitAsync(TimeSpan.FromSeconds(timeoutSeconds), cancellationToken);
+            return result;
         }
         catch (OperationCanceledException)
         {
-            _logger?.LogWarning("Timeout ao testar conexão RouterOS: {ApiUrl} (timeout: {Timeout}s)", apiUrl, timeoutSeconds);
+            _logger?.LogWarning("[Router API] Resultado da tentativa de acesso ao router via API: operação=TestarConexão, sucesso=Não, erro=Timeout ({Timeout}s)", timeoutSeconds);
             return false;
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Erro ao testar conexão RouterOS: {ApiUrl} - {Error}", apiUrl, ex.Message);
+            _logger?.LogWarning(ex, "[Router API] Resultado da tentativa de acesso ao router via API: operação=TestarConexão, sucesso=Não, erro={Error}", ex.Message);
             return false;
         }
     }
@@ -349,9 +347,10 @@ public class RouterOsClient : IRouterOsClient
     {
         try
         {
-            _logger?.LogInformation("Buscando informações do sistema RouterOS via {ApiUrl}", apiUrl);
+            var (host, port) = ParseApiUrl(apiUrl);
+            _logger?.LogInformation("[Router API] Tentativa de acesso ao router via API: Host={Host}:{Port}, operação=ObterInformaçõesSistema", host, port);
 
-            return await ExecuteWithRetryAsync(() =>
+            var info = await ExecuteWithRetryAsync(() =>
             {
                 ITikConnection? connection = null;
                 try
@@ -385,10 +384,13 @@ public class RouterOsClient : IRouterOsClient
                     SafeCloseConnection(connection);
                 }
             }, $"GetSystemInfoAsync({apiUrl})", DefaultTimeoutSeconds, cancellationToken);
+
+            _logger?.LogInformation("[Router API] Resultado da tentativa de acesso ao router via API: Host={Host}:{Port}, operação=ObterInformaçõesSistema, sucesso=Sim", host, port);
+            return info;
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Erro ao buscar informações do sistema RouterOS");
+            _logger?.LogWarning(ex, "[Router API] Resultado da tentativa de acesso ao router via API: operação=ObterInformaçõesSistema, sucesso=Não, erro={Error}", ex.Message);
             return new RouterOsSystemInfo();
         }
     }
@@ -643,9 +645,10 @@ public class RouterOsClient : IRouterOsClient
 
     public async Task<List<Dictionary<string, string>>> ExecuteCommandAsync(string apiUrl, string username, string password, string command, CancellationToken cancellationToken = default)
     {
-        _logger?.LogDebug("Executando comando RouterOS: {Command}", command);
+        var (host, port) = ParseApiUrl(apiUrl);
+        _logger?.LogInformation("[Router API] Tentativa de acesso ao router via API: Host={Host}:{Port}, operação=ExecutarComando, comando={Command}", host, port, command.Length > 80 ? command.Substring(0, 80) + "..." : command);
 
-        return await ExecuteWithRetryAsync(() =>
+        var result = await ExecuteWithRetryAsync(() =>
         {
             ITikConnection? connection = null;
             try
@@ -685,11 +688,15 @@ public class RouterOsClient : IRouterOsClient
                 SafeCloseConnection(connection);
             }
         }, $"ExecuteCommandAsync({apiUrl}, {command})", DefaultTimeoutSeconds, cancellationToken);
+
+        _logger?.LogInformation("[Router API] Resultado da tentativa de acesso ao router via API: Host={Host}:{Port}, operação=ExecutarComando, sucesso=Sim, registros={Count}", host, port, result.Count);
+        return result;
     }
 
     public async Task ExecuteCommandNoResultAsync(string apiUrl, string username, string password, string command, CancellationToken cancellationToken = default)
     {
-        _logger?.LogDebug("Executando comando RouterOS (sem resultado): {Command}", command);
+        var (host, port) = ParseApiUrl(apiUrl);
+        _logger?.LogInformation("[Router API] Tentativa de acesso ao router via API: Host={Host}:{Port}, operação=ExecutarComandoSemResultado, comando={Command}", host, port, command.Length > 80 ? command.Substring(0, 80) + "..." : command);
 
         await ExecuteWithRetryAsync(() =>
         {
@@ -716,5 +723,7 @@ public class RouterOsClient : IRouterOsClient
                 SafeCloseConnection(connection);
             }
         }, $"ExecuteCommandNoResultAsync({apiUrl}, {command})", DefaultTimeoutSeconds, cancellationToken);
+
+        _logger?.LogInformation("[Router API] Resultado da tentativa de acesso ao router via API: Host={Host}:{Port}, operação=ExecutarComandoSemResultado, sucesso=Sim", host, port);
     }
 }

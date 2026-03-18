@@ -240,7 +240,7 @@ public class RouterService : IRouterService
 
         if (dto.RouterOsApiAuthCheckedAt.HasValue)
         {
-            router.RouterOsApiAuthCheckedAt = dto.RouterOsApiAuthCheckedAt.Value;
+            router.RouterOsApiAuthCheckedAt = ToPostgreSqlUtc(dto.RouterOsApiAuthCheckedAt.Value);
         }
 
         if (dto.RouterOsApiAuthMessage != null)
@@ -254,7 +254,7 @@ public class RouterService : IRouterService
 
         if (dto.LastSeenAt.HasValue)
         {
-            router.LastSeenAt = dto.LastSeenAt.Value;
+            router.LastSeenAt = ToPostgreSqlUtc(dto.LastSeenAt.Value);
             _logger?.LogDebug($"✅ LastSeenAt atualizado para {router.LastSeenAt}");
         }
 
@@ -302,6 +302,17 @@ public class RouterService : IRouterService
         _logger?.LogInformation($"✅ [SERVICE] Router {id} salvo no banco com sucesso");
         return await MapToDtoAsync(updated, cancellationToken);
     }
+
+    /// <summary>
+    /// Npgsql / PostgreSQL timestamptz só aceita DateTime Kind=Utc.
+    /// JSON (vpnserver, routeros) pode deserializar como Local ou Unspecified.
+    /// </summary>
+    private static DateTime ToPostgreSqlUtc(DateTime dt) => dt.Kind switch
+    {
+        DateTimeKind.Utc => dt,
+        DateTimeKind.Local => dt.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+    };
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {

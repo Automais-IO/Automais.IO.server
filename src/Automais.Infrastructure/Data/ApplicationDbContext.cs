@@ -346,6 +346,15 @@ public class ApplicationDbContext : DbContext
                 .IsRequired()
                 .HasConversion<string>();
 
+            entity.Property(e => e.RouterOsApiAuthStatus)
+                .IsRequired()
+                .HasConversion<int>();
+
+            entity.Property(e => e.RouterOsApiAuthCheckedAt);
+
+            entity.Property(e => e.RouterOsApiAuthMessage)
+                .HasMaxLength(500);
+
             entity.Property(e => e.Latency);
 
             entity.Property(e => e.CreatedAt).IsRequired();

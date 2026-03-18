@@ -1,6 +1,10 @@
 using Automais.Core.DTOs;
+using Automais.Core.Hubs;
 using Automais.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Automais.Api.Extensions;
 
@@ -13,15 +17,18 @@ public class RoutersController : ControllerBase
 {
     private readonly IRouterService _routerService;
     private readonly IAuthService _authService;
+    private readonly IHubContext<RouterStatusHub> _routerStatusHub;
     private readonly ILogger<RoutersController> _logger;
 
     public RoutersController(
         IRouterService routerService,
         IAuthService authService,
+        IHubContext<RouterStatusHub> routerStatusHub,
         ILogger<RoutersController> logger)
     {
         _routerService = routerService;
         _authService = authService;
+        _routerStatusHub = routerStatusHub;
         _logger = logger;
     }
 
@@ -123,7 +130,9 @@ public class RoutersController : ControllerBase
 
         try
         {
-            var created = await _routerService.CreateAsync(tenantId, dto, cancellationToken);
+            const string provisionUsername = "automais-io";
+            var provisionPassword = GenerateTemporaryRouterPassword();
+            var created = await _routerService.CreateAsync(tenantId, dto, provisionUsername, provisionPassword, cancellationToken);
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
         catch (KeyNotFoundException ex)
@@ -236,6 +245,40 @@ public class RoutersController : ControllerBase
             
             var updated = await _routerService.UpdateAsync(id, dto, cancellationToken);
             _logger.LogInformation($"✅ [API] Router {id} atualizado com sucesso");
+
+            if (dto.Status.HasValue || dto.LastSeenAt.HasValue || dto.Latency.HasValue
+                || dto.RouterOsApiAuthStatus.HasValue || dto.RouterOsApiAuthCheckedAt.HasValue
+                || dto.RouterOsApiAuthMessage != null)
+            {
+                try
+                {
+                    await _routerStatusHub.Clients.All.SendAsync(
+                        "RouterStatusChanged",
+                        new
+                        {
+                            routerId = updated.Id,
+                            RouterId = updated.Id,
+                            status = updated.Status.ToString(),
+                            Status = updated.Status.ToString(),
+                            lastSeenAt = updated.LastSeenAt,
+                            LastSeenAt = updated.LastSeenAt,
+                            latency = updated.Latency,
+                            Latency = updated.Latency,
+                            routerOsApiAuthStatus = updated.RouterOsApiAuthStatus.ToString(),
+                            RouterOsApiAuthStatus = updated.RouterOsApiAuthStatus.ToString(),
+                            routerOsApiAuthCheckedAt = updated.RouterOsApiAuthCheckedAt,
+                            RouterOsApiAuthCheckedAt = updated.RouterOsApiAuthCheckedAt,
+                            routerOsApiAuthMessage = updated.RouterOsApiAuthMessage,
+                            RouterOsApiAuthMessage = updated.RouterOsApiAuthMessage,
+                        },
+                        cancellationToken);
+                }
+                catch (Exception hubEx)
+                {
+                    _logger.LogWarning(hubEx, "Falha ao notificar SignalR RouterStatusChanged para router {RouterId}", id);
+                }
+            }
+
             return Ok(updated);
         }
         catch (KeyNotFoundException ex)
@@ -359,6 +402,18 @@ public class RoutersController : ControllerBase
                 exceptionType = ex.GetType().Name
             });
         }
+    }
+
+    /// <summary>Senha temporária forte para API RouterOS até rotação automática.</summary>
+    private static string GenerateTemporaryRouterPassword(int length = 28)
+    {
+        const string charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#%+-_=?@^";
+        var bytes = new byte[length];
+        RandomNumberGenerator.Fill(bytes);
+        var sb = new StringBuilder(length);
+        for (var i = 0; i < length; i++)
+            sb.Append(charset[bytes[i] % charset.Length]);
+        return sb.ToString();
     }
 }
 

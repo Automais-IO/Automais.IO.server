@@ -32,6 +32,10 @@ public class RouterDto
     /// </summary>
     public string? VpnNetworkServerEndpoint { get; set; }
     public RouterStatus Status { get; set; }
+    /// <summary>API RouterOS (8728): Ok, falha de auth, inacessível ou não verificado.</summary>
+    public RouterOsApiAuthStatus RouterOsApiAuthStatus { get; set; }
+    public DateTime? RouterOsApiAuthCheckedAt { get; set; }
+    public string? RouterOsApiAuthMessage { get; set; }
     public DateTime? LastSeenAt { get; set; }
     public int? Latency { get; set; }
     public string? HardwareInfo { get; set; }
@@ -46,10 +50,16 @@ public class RouterDto
     public Guid? WireGuardPeerId { get; set; }
     /// <summary>True se o peer tem public e private key preenchidos.</summary>
     public bool WireGuardPeerKeysConfigured { get; set; }
+    /// <summary>IP do túnel VPN (primeiro endereço do AllowedIps do peer).</summary>
+    public string? VpnTunnelIp { get; set; }
+    /// <summary>Bytes recebidos pelo servidor deste peer (tráfego vindo do router).</summary>
+    public long? WireGuardBytesReceived { get; set; }
+    /// <summary>Bytes enviados pelo servidor para este peer.</summary>
+    public long? WireGuardBytesSent { get; set; }
 }
 
 /// <summary>
-/// DTO para criação de Router
+/// DTO para criação de Router. Credenciais da API RouterOS e URL da API não vêm do cliente na criação.
 /// </summary>
 public class CreateRouterDto
 {
@@ -64,9 +74,6 @@ public class CreateRouterDto
     /// </summary>
     [Obsolete("Model é obtido automaticamente via API RouterOS")]
     public string? Model { get; set; }
-    public string? RouterOsApiUrl { get; set; }
-    public string? RouterOsApiUsername { get; set; }
-    public string? RouterOsApiPassword { get; set; }
     public Guid? VpnNetworkId { get; set; }
     public string? Description { get; set; }
     /// <summary>
@@ -101,6 +108,9 @@ public class UpdateRouterDto
     public string? RouterOsApiPassword { get; set; }
     public Guid? VpnNetworkId { get; set; }
     public RouterStatus? Status { get; set; }
+    public RouterOsApiAuthStatus? RouterOsApiAuthStatus { get; set; }
+    public DateTime? RouterOsApiAuthCheckedAt { get; set; }
+    public string? RouterOsApiAuthMessage { get; set; }
     public DateTime? LastSeenAt { get; set; }
     public int? Latency { get; set; }
     public string? HardwareInfo { get; set; }

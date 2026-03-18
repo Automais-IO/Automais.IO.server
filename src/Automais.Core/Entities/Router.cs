@@ -64,7 +64,22 @@ public class Router
     public Guid? VpnNetworkId { get; set; }
     
     /// <summary>
-    /// Status atual do router
+    /// Último teste da API RouterOS (8728), independente do status VPN.
+    /// </summary>
+    public RouterOsApiAuthStatus RouterOsApiAuthStatus { get; set; } = RouterOsApiAuthStatus.Unknown;
+
+    /// <summary>
+    /// Quando o status da API RouterOS foi verificado pela última vez.
+    /// </summary>
+    public DateTime? RouterOsApiAuthCheckedAt { get; set; }
+
+    /// <summary>
+    /// Mensagem curta do último erro (auth, timeout, firewall, etc.).
+    /// </summary>
+    public string? RouterOsApiAuthMessage { get; set; }
+
+    /// <summary>
+    /// Status atual do router (VPN / disponibilidade geral)
     /// </summary>
     public RouterStatus Status { get; set; } = RouterStatus.Offline;
     
@@ -106,5 +121,16 @@ public enum RouterStatus
     Offline = 2,        // Router offline
     Maintenance = 3,    // Router em manutenção
     Error = 4           // Erro de conexão
+}
+
+/// <summary>
+/// Resultado do acesso à API RouterOS (usuário/senha + rede até :8728).
+/// </summary>
+public enum RouterOsApiAuthStatus
+{
+    Unknown = 0,
+    Ok = 1,
+    AuthFailed = 2,
+    Unreachable = 3
 }
 

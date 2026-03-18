@@ -83,7 +83,7 @@ public class RouterService : IRouterService
         return await MapToDtoAsync(router, cancellationToken);
     }
 
-    public async Task<RouterDto> CreateAsync(Guid tenantId, CreateRouterDto dto, CancellationToken cancellationToken = default)
+    public async Task<RouterDto> CreateAsync(Guid tenantId, CreateRouterDto dto, string routerOsApiUsername, string routerOsApiPassword, CancellationToken cancellationToken = default)
     {
         var tenant = await _tenantRepository.GetByIdAsync(tenantId, cancellationToken);
         if (tenant == null)
@@ -107,9 +107,9 @@ public class RouterService : IRouterService
             SerialNumber = null,
             Model = null,
             FirmwareVersion = null,
-            RouterOsApiUrl = dto.RouterOsApiUrl,
-            RouterOsApiUsername = dto.RouterOsApiUsername,
-            RouterOsApiPassword = dto.RouterOsApiPassword, // TODO: Criptografar senha
+            RouterOsApiUrl = null,
+            RouterOsApiUsername = routerOsApiUsername,
+            RouterOsApiPassword = routerOsApiPassword, // TODO: Criptografar senha
             VpnNetworkId = dto.VpnNetworkId,
             Description = dto.Description,
             Status = RouterStatus.Offline,
@@ -232,6 +232,26 @@ public class RouterService : IRouterService
             _logger?.LogDebug($"✅ Status atualizado para {router.Status}");
         }
 
+        if (dto.RouterOsApiAuthStatus.HasValue)
+        {
+            router.RouterOsApiAuthStatus = dto.RouterOsApiAuthStatus.Value;
+            _logger?.LogDebug($"✅ RouterOsApiAuthStatus atualizado para {router.RouterOsApiAuthStatus}");
+        }
+
+        if (dto.RouterOsApiAuthCheckedAt.HasValue)
+        {
+            router.RouterOsApiAuthCheckedAt = dto.RouterOsApiAuthCheckedAt.Value;
+        }
+
+        if (dto.RouterOsApiAuthMessage != null)
+        {
+            router.RouterOsApiAuthMessage = string.IsNullOrWhiteSpace(dto.RouterOsApiAuthMessage)
+                ? null
+                : dto.RouterOsApiAuthMessage.Length > 500
+                    ? dto.RouterOsApiAuthMessage[..500]
+                    : dto.RouterOsApiAuthMessage;
+        }
+
         if (dto.LastSeenAt.HasValue)
         {
             router.LastSeenAt = dto.LastSeenAt.Value;
@@ -342,6 +362,9 @@ public class RouterService : IRouterService
             }
         }
 
+        string? vpnTunnelIp = null;
+        long? wireGuardBytesReceived = null;
+        long? wireGuardBytesSent = null;
         if (router.VpnNetworkId.HasValue && _wireGuardPeerRepository != null)
         {
             try
@@ -353,6 +376,9 @@ public class RouterService : IRouterService
                     wireGuardPeerId = peer.Id;
                     wireGuardPeerKeysConfigured = !string.IsNullOrWhiteSpace(peer.PublicKey)
                                                   && !string.IsNullOrWhiteSpace(peer.PrivateKey);
+                    vpnTunnelIp = ExtractVpnTunnelIp(peer.AllowedIps);
+                    wireGuardBytesReceived = peer.BytesReceived;
+                    wireGuardBytesSent = peer.BytesSent;
                 }
             }
             catch
@@ -376,6 +402,9 @@ public class RouterService : IRouterService
             VpnNetworkId = router.VpnNetworkId,
             VpnNetworkServerEndpoint = vpnNetworkServerEndpoint,
             Status = router.Status,
+            RouterOsApiAuthStatus = router.RouterOsApiAuthStatus,
+            RouterOsApiAuthCheckedAt = router.RouterOsApiAuthCheckedAt,
+            RouterOsApiAuthMessage = router.RouterOsApiAuthMessage,
             LastSeenAt = router.LastSeenAt,
             Latency = router.Latency,
             HardwareInfo = router.HardwareInfo,
@@ -384,8 +413,19 @@ public class RouterService : IRouterService
             UpdatedAt = router.UpdatedAt,
             AllowedNetworks = allowedNetworks,
             WireGuardPeerId = wireGuardPeerId,
-            WireGuardPeerKeysConfigured = wireGuardPeerKeysConfigured
+            WireGuardPeerKeysConfigured = wireGuardPeerKeysConfigured,
+            VpnTunnelIp = vpnTunnelIp,
+            WireGuardBytesReceived = wireGuardBytesReceived,
+            WireGuardBytesSent = wireGuardBytesSent
         };
+    }
+
+    private static string? ExtractVpnTunnelIp(string? allowedIps)
+    {
+        if (string.IsNullOrWhiteSpace(allowedIps)) return null;
+        var first = allowedIps.Split(',')[0].Trim();
+        var slash = first.IndexOf('/');
+        return slash > 0 ? first[..slash] : (string.IsNullOrEmpty(first) ? null : first);
     }
 
     public async Task<RouterDto> UpdateSystemInfoAsync(Guid id, CancellationToken cancellationToken = default)

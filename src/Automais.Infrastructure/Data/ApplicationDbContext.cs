@@ -337,15 +337,13 @@ public class ApplicationDbContext : DbContext
                 .HasMaxLength(255);
 
             entity.Property(e => e.ApiUsername)
-                .HasMaxLength(100)
-                .HasColumnName("RouterOsApiUsername");
+                .HasMaxLength(100);
 
             entity.Property(e => e.ApiPasswordTemporaria)
-                .HasMaxLength(500)
-                .HasColumnName("RouterOsApiPassword");
+                .HasMaxLength(500);
 
             entity.Property(e => e.ApiPassword)
-                .HasColumnName("AutomaisApiPassword");
+                .HasMaxLength(500);
 
             entity.Property(e => e.Status)
                 .IsRequired()

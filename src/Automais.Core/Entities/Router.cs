@@ -15,7 +15,7 @@ public class Router
     /// <summary>URL da API RouterOS (ex: IP VPN:8728).</summary>
     public string? RouterOsApiUrl { get; set; }
 
-    /// <summary>Usuário da API RouterOS no MikroTik (coluna RouterOsApiUsername).</summary>
+    /// <summary>Usuário da API RouterOS no MikroTik.</summary>
     public string? ApiUsername { get; set; }
 
     /// <summary>Senha temporária/inicial (provisionamento .rsc ou primeira carga). Depois do primeiro sucesso, limpa-se e usa-se <see cref="ApiPassword"/>.</summary>

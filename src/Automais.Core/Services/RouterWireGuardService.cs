@@ -82,11 +82,10 @@ public class RouterWireGuardService : IRouterWireGuardService
         string routerIp;
         var allowedNetworks = new List<string>();
         
-        if (!string.IsNullOrWhiteSpace(dto.AllowedIps))
+        if (!string.IsNullOrWhiteSpace(dto.PeerIp))
         {
-            // Se AllowedIps foi fornecido, pode conter múltiplas redes separadas por vírgula
-            // O primeiro elemento é o IP do router (manual), os demais são redes permitidas
-            var networks = dto.AllowedIps.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            // PeerIp pode conter múltiplas redes separadas por vírgula (primeiro = IP do router, demais = redes permitidas)
+            var networks = dto.PeerIp.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             
             if (networks.Length > 0)
             {
@@ -123,33 +122,20 @@ public class RouterWireGuardService : IRouterWireGuardService
             routerIp = await AllocateNextAvailableIpAsync(vpnNetwork, cancellationToken);
         }
 
-        // Construir AllowedIps completo (IP do router + redes permitidas)
-        // IMPORTANTE: Garantir que o IP do router use /32 (IP individual)
+        // Construir PeerIp (IP do router + redes permitidas). IP do router deve usar /32.
         var routerIpNormalized = routerIp;
         if (IsValidIpWithPrefix(routerIp))
         {
             var ipParts = routerIp.Split('/');
             if (ipParts.Length == 2 && ipParts[1] != "32")
-            {
-                // Se o IP tem prefixo diferente de /32, normalizar para /32
                 routerIpNormalized = $"{ipParts[0]}/32";
-            }
         }
         else
-        {
-            // Se não tem prefixo, adicionar /32
             routerIpNormalized = $"{routerIp}/32";
-        }
-        
-        var allowedIpsParts = new List<string> { routerIpNormalized };
-        allowedIpsParts.AddRange(allowedNetworks);
-        var allowedIps = string.Join(",", allowedIpsParts);
-        
-        // Normalizar AllowedIps completo (garantir que primeiro IP seja /32)
-        allowedIps = NormalizeAllowedIps(allowedIps);
+        var peerIpParts = new List<string> { routerIpNormalized };
+        peerIpParts.AddRange(allowedNetworks);
+        var peerIpValue = NormalizePeerIp(string.Join(",", peerIpParts));
 
-        // Criar peer no banco de dados
-        // O serviço Python sincroniza automaticamente a cada minuto e adiciona à interface WireGuard
         var peer = new RouterWireGuardPeer
         {
             Id = Guid.NewGuid(),
@@ -157,7 +143,7 @@ public class RouterWireGuardService : IRouterWireGuardService
             VpnNetworkId = dto.VpnNetworkId,
             PublicKey = publicKey,
             PrivateKey = privateKey,
-            AllowedIps = allowedIps,
+            PeerIp = peerIpValue,
             Endpoint = vpnNetwork.ServerEndpoint, // Endpoint vem da VpnNetwork
             IsEnabled = true,
             CreatedAt = DateTime.UtcNow,
@@ -180,9 +166,8 @@ public class RouterWireGuardService : IRouterWireGuardService
             throw new KeyNotFoundException($"Peer WireGuard com ID {id} não encontrado.");
         }
 
-        // Normalizar AllowedIps para garantir que IPs individuais usem /32
-        var normalizedAllowedIps = NormalizeAllowedIps(dto.AllowedIps);
-        peer.AllowedIps = normalizedAllowedIps;
+        var normalizedPeerIp = NormalizePeerIp(dto.PeerIp);
+        peer.PeerIp = normalizedPeerIp;
         
         // Endpoint e ListenPort vêm da VpnNetwork
         peer.UpdatedAt = DateTime.UtcNow;
@@ -382,7 +367,7 @@ public class RouterWireGuardService : IRouterWireGuardService
             RouterId = peer.RouterId,
             VpnNetworkId = peer.VpnNetworkId,
             PublicKey = peer.PublicKey,
-            AllowedIps = peer.AllowedIps,
+            PeerIp = peer.PeerIp,
             Endpoint = peer.Endpoint,
             ListenPort = listenPort,
             LastHandshake = peer.LastHandshake,
@@ -441,8 +426,6 @@ public class RouterWireGuardService : IRouterWireGuardService
         
         foreach (var allocatedIp in allocatedIps)
         {
-            // Extrair apenas o IP (sem o prefix) do AllowedIps
-            // AllowedIps pode ser "10.100.1.50/32" ou "10.100.1.50/32,10.0.0.0/8"
             var firstIp = allocatedIp.Split(',')[0].Trim();
             if (IsValidIpWithPrefix(firstIp))
             {
@@ -487,18 +470,16 @@ public class RouterWireGuardService : IRouterWireGuardService
     }
 
     /// <summary>
-    /// Normaliza AllowedIPs para garantir que IPs individuais usem /32.
-    /// O primeiro IP (IP do router) deve sempre ser /32.
-    /// Redes adicionais mantêm seu prefixo original.
+    /// Normaliza PeerIp: primeiro IP (router) em /32; redes adicionais mantêm o prefixo.
     /// </summary>
-    private static string NormalizeAllowedIps(string? allowedIps)
+    private static string NormalizePeerIp(string? peerIp)
     {
-        if (string.IsNullOrWhiteSpace(allowedIps))
-            return allowedIps ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(peerIp))
+            return peerIp ?? string.Empty;
 
-        var parts = allowedIps.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = peerIp.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length == 0)
-            return allowedIps;
+            return peerIp;
 
         // Normalizar primeiro IP (IP do router) para /32
         var firstIp = parts[0];
@@ -585,10 +566,8 @@ public class RouterWireGuardService : IRouterWireGuardService
     /// </summary>
     private static string GenerateRouterConfig(Router router, RouterWireGuardPeer peer, VpnNetwork vpnNetwork)
     {
-        // Extrair IP do router (primeiro elemento do AllowedIps)
-        // IMPORTANTE: No BD o IP está como /32 (para WireGuard Linux funcionar),
-        // mas no arquivo .conf para RouterOS usamos /24 (para importar corretamente)
-        var routerIpWithPrefix = peer.AllowedIps.Split(',')[0].Trim();
+        // Extrair IP do router (primeiro elemento do PeerIp)
+        var routerIpWithPrefix = peer.PeerIp.Split(',')[0].Trim();
         var routerIp = routerIpWithPrefix;
         if (routerIpWithPrefix.Contains('/'))
         {
@@ -629,15 +608,10 @@ public class RouterWireGuardService : IRouterWireGuardService
         configLines.Add($"PublicKey = {serverPublicKey}");
         configLines.Add($"Endpoint = {serverEndpoint}:{listenPort}");
 
-        // Construir AllowedIPs: CIDR da VPN + redes permitidas adicionais
-        var allowedIpsParts = peer.AllowedIps.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var peerIpParts = peer.PeerIp.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var allowedNetworks = new List<string> { vpnNetwork.Cidr };
-        
-        // Adicionar redes permitidas adicionais (se houver mais de um IP no AllowedIps)
-        if (allowedIpsParts.Length > 1)
-        {
-            allowedNetworks.AddRange(allowedIpsParts.Skip(1));
-        }
+        if (peerIpParts.Length > 1)
+            allowedNetworks.AddRange(peerIpParts.Skip(1));
         
         configLines.Add($"AllowedIPs = {string.Join(", ", allowedNetworks)}");
         configLines.Add("PersistentKeepalive = 25");

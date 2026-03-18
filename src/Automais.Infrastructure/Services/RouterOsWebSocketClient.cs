@@ -202,15 +202,12 @@ public class RouterOsWebSocketClient : IRouterOsWebSocketClient
         // Se não tiver, tentar buscar do peer WireGuard
         var peers = await _peerRepository.GetByRouterIdAsync(router.Id, cancellationToken);
         var activePeer = peers.FirstOrDefault();
-        if (activePeer != null && !string.IsNullOrWhiteSpace(activePeer.AllowedIps))
+        if (activePeer != null && !string.IsNullOrWhiteSpace(activePeer.PeerIp))
         {
-            // Extrair IP do primeiro allowed IP (formato: "10.222.111.2/32" -> "10.222.111.2")
-            var allowedIps = activePeer.AllowedIps.Split(',')[0].Trim();
-            if (allowedIps.Contains('/'))
-            {
-                return allowedIps.Split('/')[0].Trim();
-            }
-            return allowedIps;
+            var first = activePeer.PeerIp.Split(',')[0].Trim();
+            if (first.Contains('/'))
+                return first.Split('/')[0].Trim();
+            return first;
         }
 
         return null;

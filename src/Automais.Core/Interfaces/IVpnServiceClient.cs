@@ -9,7 +9,8 @@ public class ProvisionPeerResult
 {
     public string PublicKey { get; set; } = string.Empty;
     public string PrivateKey { get; set; } = string.Empty;
-    public string AllowedIps { get; set; } = string.Empty;
+    /// <summary>IP do peer na VPN (ex: 10.100.1.50/32).</summary>
+    public string PeerIp { get; set; } = string.Empty;
 }
 
 /// <summary>

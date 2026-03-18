@@ -124,32 +124,18 @@ public class RouterService : IRouterService
         {
             try
             {
-                // Construir AllowedIps: primeiro o IP do router (ou vazio para alocação automática),
+                // Construir PeerIp: primeiro o IP do router (ou vazio para alocação automática),
                 // depois as redes permitidas separadas por vírgula
-                // O formato esperado é: "IP/PREFIX,rede1,rede2,..." ou apenas "rede1,rede2,..." (para alocação automática)
-                var allowedIpsParts = new List<string>();
-                
-                // Se VpnIp foi fornecido, usar ele como primeiro elemento; caso contrário, deixar vazio para alocação automática
+                var peerIpParts = new List<string>();
                 if (!string.IsNullOrWhiteSpace(dto.VpnIp))
-                {
-                    allowedIpsParts.Add(dto.VpnIp);
-                }
-                
-                // Adicionar redes permitidas se fornecidas
+                    peerIpParts.Add(dto.VpnIp);
                 if (dto.AllowedNetworks != null)
-                {
-                    allowedIpsParts.AddRange(dto.AllowedNetworks);
-                }
-                
-                // Se não há IP manual nem redes permitidas, deixar vazio para alocação automática
-                // Caso contrário, juntar tudo com vírgula
-                var allowedIps = allowedIpsParts.Count > 0 ? string.Join(",", allowedIpsParts) : string.Empty;
-                
-                // Criar peer automaticamente
+                    peerIpParts.AddRange(dto.AllowedNetworks);
+                var peerIp = peerIpParts.Count > 0 ? string.Join(",", peerIpParts) : string.Empty;
                 var peerDto = new CreateRouterWireGuardPeerDto
                 {
                     VpnNetworkId = created.VpnNetworkId.Value,
-                    AllowedIps = allowedIps
+                    PeerIp = peerIp
                 };
                 
                 await _wireGuardService.CreatePeerAsync(created.Id, peerDto, cancellationToken);
@@ -391,7 +377,7 @@ public class RouterService : IRouterService
                     wireGuardPeerId = peer.Id;
                     wireGuardPeerKeysConfigured = !string.IsNullOrWhiteSpace(peer.PublicKey)
                                                   && !string.IsNullOrWhiteSpace(peer.PrivateKey);
-                    vpnTunnelIp = ExtractVpnTunnelIp(peer.AllowedIps);
+                    vpnTunnelIp = ExtractVpnTunnelIp(peer.PeerIp);
                     wireGuardBytesReceived = peer.BytesReceived;
                     wireGuardBytesSent = peer.BytesSent;
                 }
@@ -435,10 +421,10 @@ public class RouterService : IRouterService
         };
     }
 
-    private static string? ExtractVpnTunnelIp(string? allowedIps)
+    private static string? ExtractVpnTunnelIp(string? peerIp)
     {
-        if (string.IsNullOrWhiteSpace(allowedIps)) return null;
-        var first = allowedIps.Split(',')[0].Trim();
+        if (string.IsNullOrWhiteSpace(peerIp)) return null;
+        var first = peerIp.Split(',')[0].Trim();
         var slash = first.IndexOf('/');
         return slash > 0 ? first[..slash] : (string.IsNullOrEmpty(first) ? null : first);
     }

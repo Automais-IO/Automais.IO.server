@@ -9,7 +9,8 @@ public class RouterWireGuardPeerDto
     public Guid RouterId { get; set; }
     public Guid VpnNetworkId { get; set; }
     public string PublicKey { get; set; } = string.Empty;
-    public string AllowedIps { get; set; } = string.Empty;
+    /// <summary>IP do peer na VPN (ex: 10.100.1.50/32). Endereço usado para conectar ao router.</summary>
+    public string PeerIp { get; set; } = string.Empty;
     public string? Endpoint { get; set; }
     /// <summary>Porta UDP do servidor WireGuard (da VpnNetwork associada).</summary>
     public int ListenPort { get; set; }
@@ -30,7 +31,8 @@ public class RouterWireGuardPeerDto
 public class CreateRouterWireGuardPeerDto
 {
     public Guid VpnNetworkId { get; set; }
-    public string AllowedIps { get; set; } = string.Empty;
+    /// <summary>IP do peer na VPN (ex: 10.100.1.50/32). Pode incluir redes adicionais separadas por vírgula.</summary>
+    public string PeerIp { get; set; } = string.Empty;
     public string? Endpoint { get; set; }
 }
 

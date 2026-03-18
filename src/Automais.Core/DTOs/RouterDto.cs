@@ -45,7 +45,7 @@ public class RouterDto
     public Guid? WireGuardPeerId { get; set; }
     /// <summary>True se o peer tem public e private key preenchidos.</summary>
     public bool WireGuardPeerKeysConfigured { get; set; }
-    /// <summary>IP do túnel VPN (primeiro endereço do AllowedIps do peer).</summary>
+    /// <summary>IP do peer na VPN (extraído do PeerIp do peer). Endereço usado para conectar ao router (API/ping).</summary>
     public string? VpnTunnelIp { get; set; }
     /// <summary>Bytes recebidos pelo servidor deste peer (tráfego vindo do router).</summary>
     public long? WireGuardBytesReceived { get; set; }

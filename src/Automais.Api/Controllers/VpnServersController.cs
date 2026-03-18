@@ -79,14 +79,15 @@ public class VpnServersController : ControllerBase
             {
                 var peers = await _peerRepository.GetByRouterIdAsync(router.Id, cancellationToken);
                 var peersList = peers
-                    .Where(p => p.IsEnabled && !string.IsNullOrEmpty(p.PublicKey) && !string.IsNullOrEmpty(p.AllowedIps))
+                    .Where(p => p.IsEnabled && !string.IsNullOrEmpty(p.PublicKey) && !string.IsNullOrEmpty(p.PeerIp))
                     .Select(p => new
                     {
                         id = p.Id.ToString(),
                         router_id = p.RouterId.ToString(),
                         vpn_network_id = p.VpnNetworkId.ToString(),
                         public_key = p.PublicKey,
-                        allowed_ips = p.AllowedIps,
+                        peer_ip = p.PeerIp,
+                        allowed_ips = p.PeerIp,
                         endpoint = p.Endpoint,
                         listen_port = vpnPortById.GetValueOrDefault(p.VpnNetworkId.ToString(), 51820),
                         is_enabled = p.IsEnabled

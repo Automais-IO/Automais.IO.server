@@ -395,7 +395,7 @@ public class ApplicationDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(500);
 
-            entity.Property(e => e.AllowedIps)
+            entity.Property(e => e.PeerIp)
                 .IsRequired()
                 .HasMaxLength(255);
 

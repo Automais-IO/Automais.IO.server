@@ -29,9 +29,10 @@ public class RouterWireGuardPeer
     public string PrivateKey { get; set; } = string.Empty;
     
     /// <summary>
-    /// IPs permitidos (ex: "10.100.1.50/32")
+    /// IP do peer na VPN (ex: "10.100.1.50/32" ou "10.100.1.50/32,10.0.0.0/8").
+    /// Este é o endereço usado para conectar ao router via API (ping e porta 8728).
     /// </summary>
-    public string AllowedIps { get; set; } = string.Empty;
+    public string PeerIp { get; set; } = string.Empty;
     
     /// <summary>
     /// Endpoint do portal (IP público)

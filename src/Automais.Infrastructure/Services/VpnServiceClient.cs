@@ -174,7 +174,7 @@ public class VpnServiceClient : IVpnServiceClient
             {
                 PublicKey = result.PublicKey,
                 PrivateKey = result.PrivateKey ?? string.Empty,
-                AllowedIps = result.AllowedIps ?? manualIp ?? string.Empty
+                PeerIp = result.PeerIp ?? result.AllowedIps ?? manualIp ?? string.Empty
             };
         }
         catch (HttpRequestException ex)
@@ -404,6 +404,7 @@ public class VpnServiceClient : IVpnServiceClient
     {
         public string PublicKey { get; set; } = string.Empty;
         public string? PrivateKey { get; set; }
+        public string? PeerIp { get; set; }
         public string? AllowedIps { get; set; }
         public string InterfaceName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;

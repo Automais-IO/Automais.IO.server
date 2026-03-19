@@ -172,7 +172,10 @@ public class RouterStaticRouteService : IRouterStaticRouteService
         }
 
         route.Status = dto.Status;
-        route.RouterOsId = dto.RouterOsId;
+        // Só atualizar RouterOsId quando o DTO trouxer valor; não sobrescrever com null para evitar
+        // perder a referência ao ID no RouterOS e gerar regra órfã no MK ao falhar a remoção
+        if (dto.RouterOsId != null)
+            route.RouterOsId = dto.RouterOsId;
         route.ErrorMessage = dto.ErrorMessage;
         
         // Atualizar gateway se fornecido (RouterOS pode ter usado interface como gateway)

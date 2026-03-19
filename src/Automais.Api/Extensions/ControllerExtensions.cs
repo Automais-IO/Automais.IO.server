@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Automais.Core.Interfaces;
 
 namespace Automais.Api.Extensions;
@@ -38,6 +39,23 @@ public static class ControllerExtensions
         }
         return false;
     }
+
+    /// <summary>
+    /// Indica se a requisição é de um serviço interno com chave configurada (ex.: routeros-service atrás de proxy).
+    /// Requer configuração "InternalApiKey", "Automais:InternalApiKey" ou env AUTOMAIS_INTERNAL_API_KEY,
+    /// e header "X-Automais-Internal-Key" com o mesmo valor.
+    /// </summary>
+    public static bool IsInternalRequest(this HttpContext context, IConfiguration configuration)
+    {
+        if (context == null) return false;
+        var key = configuration?["InternalApiKey"]
+            ?? configuration?["Automais:InternalApiKey"]
+            ?? Environment.GetEnvironmentVariable("AUTOMAIS_INTERNAL_API_KEY");
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        var header = context.Request.Headers["X-Automais-Internal-Key"].FirstOrDefault();
+        return !string.IsNullOrWhiteSpace(header) && string.Equals(header.Trim(), key.Trim(), StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Obtém o TenantId do usuário autenticado a partir do token JWT
     /// Tenta primeiro via Claims (se JWT estiver configurado), depois via validação manual do token
@@ -129,7 +147,7 @@ public static class ControllerExtensions
 
         if (userTenantId.Value != requestedTenantId)
         {
-            return new ForbidResult();
+            return new ObjectResult(new { message = "Acesso negado ao tenant." }) { StatusCode = StatusCodes.Status403Forbidden };
         }
 
         return null; // Acesso permitido

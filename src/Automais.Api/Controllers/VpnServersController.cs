@@ -1,3 +1,4 @@
+using Automais.Api.Extensions;
 using Automais.Core.DTOs;
 using Automais.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -16,17 +17,20 @@ public class VpnServersController : ControllerBase
     private readonly IRouterRepository _routerRepository;
     private readonly IRouterWireGuardPeerRepository _peerRepository;
     private readonly ILogger<VpnServersController> _logger;
+    private readonly IConfiguration _configuration;
 
     public VpnServersController(
         IVpnNetworkRepository vpnNetworkRepository,
         IRouterRepository routerRepository,
         IRouterWireGuardPeerRepository peerRepository,
-        ILogger<VpnServersController> logger)
+        ILogger<VpnServersController> logger,
+        IConfiguration configuration)
     {
         _vpnNetworkRepository = vpnNetworkRepository;
         _routerRepository = routerRepository;
         _peerRepository = peerRepository;
         _logger = logger;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -39,6 +43,11 @@ public class VpnServersController : ControllerBase
     [HttpGet("vpn/networks/{endpoint}/resources")]
     public async Task<ActionResult<object>> GetNetworkResources(string endpoint, CancellationToken cancellationToken = default)
     {
+        if (!HttpContext.IsLocalRequest() && !HttpContext.IsInternalRequest(_configuration))
+        {
+            return StatusCode(403, new { message = "Acesso negado. Use autenticação (Bearer) ou chave de serviço (X-Automais-Internal-Key)." });
+        }
+
         try
         {
             _logger.LogInformation("Serviço VPN com endpoint '{Endpoint}' consultando seus recursos", endpoint);

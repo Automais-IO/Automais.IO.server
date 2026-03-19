@@ -44,6 +44,7 @@ Environment="SMTP_HOST=smtp.office365.com"
 Environment="SMTP_PORT=587"
 Environment="SMTP_USERNAME=noreply@automais.io"
 Environment="SMTP_USE_SSL=true"
+Environment="AUTOMAIS_SERVER_API_KEY=eob4CuvEdZM7qH+RLME6+vc/JjPblIWhUbC1lvTKWYw="
 
 [Install]
 WantedBy=multi-user.target

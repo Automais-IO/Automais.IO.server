@@ -118,7 +118,7 @@ public class VpnNetworksController : ControllerBase
         var userTenantId = this.GetTenantId(_authService);
         if (!userTenantId.HasValue || network.TenantId != userTenantId.Value)
         {
-            return new ForbidResult();
+            return StatusCode(403, new { message = "Acesso negado à rede VPN." });
         }
 
         return Ok(network);
@@ -136,7 +136,7 @@ public class VpnNetworksController : ControllerBase
         var userTenantId = this.GetTenantId(_authService);
         if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
         {
-            return new ForbidResult();
+            return StatusCode(403, new { message = "Acesso negado à rede VPN." });
         }
 
         try
@@ -171,7 +171,7 @@ public class VpnNetworksController : ControllerBase
         var userTenantId = this.GetTenantId(_authService);
         if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
         {
-            return new ForbidResult();
+            return StatusCode(403, new { message = "Acesso negado à rede VPN." });
         }
 
         await _vpnNetworkService.DeleteAsync(id, cancellationToken);
@@ -190,7 +190,7 @@ public class VpnNetworksController : ControllerBase
         var userTenantId = this.GetTenantId(_authService);
         if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
         {
-            return new ForbidResult();
+            return StatusCode(403, new { message = "Acesso negado à rede VPN." });
         }
 
         try

@@ -19,17 +19,20 @@ public class RoutersController : ControllerBase
     private readonly IAuthService _authService;
     private readonly IHubContext<RouterStatusHub> _routerStatusHub;
     private readonly ILogger<RoutersController> _logger;
+    private readonly IConfiguration _configuration;
 
     public RoutersController(
         IRouterService routerService,
         IAuthService authService,
         IHubContext<RouterStatusHub> routerStatusHub,
-        ILogger<RoutersController> logger)
+        ILogger<RoutersController> logger,
+        IConfiguration configuration)
     {
         _routerService = routerService;
         _authService = authService;
         _routerStatusHub = routerStatusHub;
         _logger = logger;
+        _configuration = configuration;
     }
 
     [HttpGet("routers")]
@@ -94,15 +97,15 @@ public class RoutersController : ControllerBase
                 return NotFound(new { message = $"Router com ID {id} não encontrado" });
             }
 
-            // Requisições de localhost (ex.: routeros-service) dispensam autenticação
-            if (HttpContext.IsLocalRequest())
+            // Requisições de localhost ou com chave interna (ex.: routeros-service) dispensam autenticação
+            if (HttpContext.IsLocalRequest() || HttpContext.IsInternalRequest(_configuration))
                 return Ok(router);
 
             // Validar se o router pertence ao tenant do usuário autenticado
             var userTenantId = this.GetTenantId(_authService);
             if (!userTenantId.HasValue || router.TenantId != userTenantId.Value)
             {
-                return new ForbidResult();
+                return StatusCode(403, new { message = "Acesso negado ao router." });
             }
 
             return Ok(router);

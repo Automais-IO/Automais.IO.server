@@ -267,19 +267,12 @@ public class RoutersController : ControllerBase
                         new
                         {
                             routerId = updated.Id,
-                            RouterId = updated.Id,
                             status = updated.Status.ToString(),
-                            Status = updated.Status.ToString(),
                             lastSeenAt = updated.LastSeenAt,
-                            LastSeenAt = updated.LastSeenAt,
                             latency = updated.Latency,
-                            Latency = updated.Latency,
-                            routerOsApiAuthStatus = updated.RouterOsApiAuthStatus.ToString(),
-                            RouterOsApiAuthStatus = updated.RouterOsApiAuthStatus.ToString(),
+                            routerOsApiAuthStatus = updated.RouterOsApiAuthStatus?.ToString(),
                             routerOsApiAuthCheckedAt = updated.RouterOsApiAuthCheckedAt,
-                            RouterOsApiAuthCheckedAt = updated.RouterOsApiAuthCheckedAt,
                             routerOsApiAuthMessage = updated.RouterOsApiAuthMessage,
-                            RouterOsApiAuthMessage = updated.RouterOsApiAuthMessage,
                         },
                         cancellationToken);
                 }

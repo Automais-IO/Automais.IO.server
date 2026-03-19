@@ -12,6 +12,7 @@ public interface IRouterAllowedNetworkRepository
     Task<IEnumerable<RouterAllowedNetwork>> GetAllByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<RouterAllowedNetwork?> GetByRouterIdAndCidrAsync(Guid routerId, string networkCidr, CancellationToken cancellationToken = default);
     Task<RouterAllowedNetwork> CreateAsync(RouterAllowedNetwork network, CancellationToken cancellationToken = default);
+    Task<RouterAllowedNetwork> UpdateAsync(RouterAllowedNetwork network, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task DeleteByRouterIdAndCidrAsync(Guid routerId, string networkCidr, CancellationToken cancellationToken = default);
 }

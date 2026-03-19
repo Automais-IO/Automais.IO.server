@@ -56,6 +56,13 @@ public class RouterAllowedNetworkRepository : IRouterAllowedNetworkRepository
         return network;
     }
 
+    public async Task<RouterAllowedNetwork> UpdateAsync(RouterAllowedNetwork network, CancellationToken cancellationToken = default)
+    {
+        _context.Set<RouterAllowedNetwork>().Update(network);
+        await _context.SaveChangesAsync(cancellationToken);
+        return network;
+    }
+
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var network = await GetByIdAsync(id, cancellationToken);

@@ -119,33 +119,24 @@ public class RouterService : IRouterService
 
         var created = await _routerRepository.CreateAsync(router, cancellationToken);
         
-        // Se tem VpnNetworkId, provisionar WireGuard automaticamente
+        // Se tem VpnNetworkId, provisionar WireGuard automaticamente.
+        // PeerIp = apenas IP do router (ou vazio para alocação automática). Redes destino são adicionadas depois via CRUD.
         if (created.VpnNetworkId.HasValue && _wireGuardService != null)
         {
             try
             {
-                // Construir PeerIp: primeiro o IP do router (ou vazio para alocação automática),
-                // depois as redes permitidas separadas por vírgula
-                var peerIpParts = new List<string>();
-                if (!string.IsNullOrWhiteSpace(dto.VpnIp))
-                    peerIpParts.Add(dto.VpnIp);
-                if (dto.AllowedNetworks != null)
-                    peerIpParts.AddRange(dto.AllowedNetworks);
-                var peerIp = peerIpParts.Count > 0 ? string.Join(",", peerIpParts) : string.Empty;
+                var peerIp = !string.IsNullOrWhiteSpace(dto.VpnIp) ? dto.VpnIp : string.Empty;
                 var peerDto = new CreateRouterWireGuardPeerDto
                 {
                     VpnNetworkId = created.VpnNetworkId.Value,
                     PeerIp = peerIp
                 };
-                
+
                 await _wireGuardService.CreatePeerAsync(created.Id, peerDto, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Logar erro mas não falhar a criação do router
-                // O peer pode ser criado manualmente depois se necessário
-                // TODO: Adicionar logging quando tiver ILogger
-                // Por enquanto, apenas continua sem criar o peer
+                // Logar erro mas não falhar a criação do router; o peer pode ser criado manualmente depois
             }
         }
         
@@ -330,7 +321,7 @@ public class RouterService : IRouterService
 
     private async Task<RouterDto> MapToDtoAsync(Router router, CancellationToken cancellationToken = default)
     {
-        // Buscar redes permitidas se houver repositório disponível
+        // Buscar redes destino se houver repositório disponível
         IEnumerable<string>? allowedNetworks = null;
         if (_allowedNetworkRepository != null)
         {

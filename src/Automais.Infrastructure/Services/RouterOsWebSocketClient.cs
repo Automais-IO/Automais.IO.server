@@ -189,14 +189,17 @@ public class RouterOsWebSocketClient : IRouterOsWebSocketClient
 
     private async Task<string?> GetRouterIpAsync(Core.Entities.Router router, CancellationToken cancellationToken)
     {
-        // Tentar obter do RouterOsApiUrl
+        // Tentar obter do RouterOsApiUrl (remover protocolo https:// ou http:// antes de extrair host)
         if (!string.IsNullOrWhiteSpace(router.RouterOsApiUrl))
         {
-            var parts = router.RouterOsApiUrl.Split(':');
-            if (parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]))
-            {
-                return parts[0].Trim();
-            }
+            var u = router.RouterOsApiUrl.Trim();
+            if (u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                u = u.Substring(8);
+            else if (u.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                u = u.Substring(7);
+            var host = u.Split('/')[0].Split(':')[0].Trim();
+            if (!string.IsNullOrWhiteSpace(host))
+                return host;
         }
 
         // Se não tiver, tentar buscar do peer WireGuard

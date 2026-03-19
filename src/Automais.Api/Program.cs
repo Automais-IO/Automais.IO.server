@@ -378,6 +378,16 @@ builder.Services.AddScoped<IRouterStaticRouteService>(sp =>
     return new Automais.Core.Services.RouterStaticRouteService(routeRepo, routerRepo, logger);
 });
 
+// Registrar RouterAllowedNetworkService (redes destino)
+builder.Services.AddScoped<IRouterAllowedNetworkService>(sp =>
+{
+    var allowedRepo = sp.GetRequiredService<IRouterAllowedNetworkRepository>();
+    var routerRepo = sp.GetRequiredService<IRouterRepository>();
+    var peerRepo = sp.GetRequiredService<IRouterWireGuardPeerRepository>();
+    var logger = sp.GetService<ILogger<Automais.Core.Services.RouterAllowedNetworkService>>();
+    return new Automais.Core.Services.RouterAllowedNetworkService(allowedRepo, routerRepo, peerRepo, logger);
+});
+
 builder.Services.AddScoped<IAuthService, Automais.Infrastructure.Services.AuthService>();
 builder.Services.AddScoped<IUserVpnService, Automais.Infrastructure.Services.UserVpnService>();
 

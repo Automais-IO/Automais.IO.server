@@ -36,7 +36,7 @@ public interface IVpnServiceClient
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Adiciona uma rede permitida ao router
+    /// Adiciona uma rede destino ao router (encaminhamento via este tunnel).
     /// </summary>
     Task AddNetworkToRouterAsync(
         Guid routerId,
@@ -45,7 +45,7 @@ public interface IVpnServiceClient
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Remove uma rede permitida do router
+    /// Remove uma rede destino do router.
     /// </summary>
     Task RemoveNetworkFromRouterAsync(
         Guid routerId,

@@ -98,7 +98,7 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
             return; // Nenhuma rota para adicionar
         }
 
-        // Buscar informações das redes permitidas
+        // Buscar informações das redes destino
         var allowedNetworks = await _context.Set<RouterAllowedNetwork>()
             .Include(n => n.Router)
             .Where(n => networkIds.Contains(n.Id))
@@ -108,7 +108,7 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
         var missingIds = networkIds.Except(allowedNetworks.Select(n => n.Id)).ToList();
         if (missingIds.Any())
         {
-            throw new KeyNotFoundException($"Redes permitidas não encontradas: {string.Join(", ", missingIds)}");
+            throw new KeyNotFoundException($"Redes destino não encontradas: {string.Join(", ", missingIds)}");
         }
 
         // Criar novas rotas

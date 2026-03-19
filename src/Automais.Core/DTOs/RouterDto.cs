@@ -38,7 +38,7 @@ public class RouterDto
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     /// <summary>
-    /// Redes permitidas para o router via VPN (ex: ["10.0.1.0/24", "192.168.100.0/24"])
+    /// Redes destino: redes para as quais o tráfego VPN é encaminhado via este router (iptables/WG). Ex: ["10.0.1.0/24", "192.168.100.0/24"]
     /// </summary>
     public IEnumerable<string>? AllowedNetworks { get; set; }
     /// <summary>Peer WireGuard para a VpnNetworkId atual, se existir.</summary>
@@ -72,7 +72,7 @@ public class CreateRouterDto
     public Guid? VpnNetworkId { get; set; }
     public string? Description { get; set; }
     /// <summary>
-    /// Redes permitidas para o router via WireGuard (ex: ["10.0.1.0/24", "192.168.100.0/24"])
+    /// Ignorado na criação: redes destino são gerenciadas via CRUD em /routers/{id}/destination-networks após criar o router.
     /// </summary>
     public IEnumerable<string>? AllowedNetworks { get; set; }
     /// <summary>

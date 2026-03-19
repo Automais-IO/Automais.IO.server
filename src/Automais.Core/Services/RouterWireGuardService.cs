@@ -84,7 +84,7 @@ public class RouterWireGuardService : IRouterWireGuardService
         
         if (!string.IsNullOrWhiteSpace(dto.PeerIp))
         {
-            // PeerIp pode conter múltiplas redes separadas por vírgula (primeiro = IP do router, demais = redes permitidas)
+            // PeerIp pode conter múltiplas redes separadas por vírgula (primeiro = IP do router, demais = redes destino)
             var networks = dto.PeerIp.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             
             if (networks.Length > 0)
@@ -104,7 +104,7 @@ public class RouterWireGuardService : IRouterWireGuardService
                     throw new InvalidOperationException($"IP {routerIp} não está na rede VPN {vpnNetwork.Cidr}");
                 }
                 
-                // Demais elementos são redes permitidas
+                // Demais elementos são redes destino
                 if (networks.Length > 1)
                 {
                     allowedNetworks.AddRange(networks.Skip(1));
@@ -122,7 +122,7 @@ public class RouterWireGuardService : IRouterWireGuardService
             routerIp = await AllocateNextAvailableIpAsync(vpnNetwork, cancellationToken);
         }
 
-        // Construir PeerIp (IP do router + redes permitidas). IP do router deve usar /32.
+        // Construir PeerIp (IP do router + redes destino). IP do router deve usar /32.
         var routerIpNormalized = routerIp;
         if (IsValidIpWithPrefix(routerIp))
         {

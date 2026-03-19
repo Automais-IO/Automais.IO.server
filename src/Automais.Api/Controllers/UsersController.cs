@@ -154,7 +154,7 @@ public class UsersController : ControllerBase
     {
         try
         {
-            // Buscar todos os routers do tenant e suas redes permitidas
+            // Buscar todos os routers do tenant e suas redes destino
             var routers = await _routerAllowedNetworkRepository.GetAllByTenantIdAsync(tenantId, cancellationToken);
             
             var routes = routers.Select(r => new RouterRouteDto

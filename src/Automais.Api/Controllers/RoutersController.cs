@@ -270,7 +270,7 @@ public class RoutersController : ControllerBase
                             status = updated.Status.ToString(),
                             lastSeenAt = updated.LastSeenAt,
                             latency = updated.Latency,
-                            routerOsApiAuthStatus = updated.RouterOsApiAuthStatus?.ToString(),
+                            routerOsApiAuthStatus = updated.RouterOsApiAuthStatus.ToString(),
                             routerOsApiAuthCheckedAt = updated.RouterOsApiAuthCheckedAt,
                             routerOsApiAuthMessage = updated.RouterOsApiAuthMessage,
                         },

@@ -21,8 +21,8 @@ public static class ControllerExtensions
         if (context?.Connection?.RemoteIpAddress == null)
             return false;
         var remote = context.Connection.RemoteIpAddress;
-        if (System.Net.IPAddress.IsIPv4MappedToIPv6(remote))
-            remote = System.Net.IPAddress.MapToIPv4(remote);
+        if (remote.IsIPv4MappedToIPv6)
+            remote = remote.MapToIPv4();
         if (remote.Equals(System.Net.IPAddress.Loopback) || remote.Equals(System.Net.IPAddress.IPv6Loopback))
             return true;
         var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
@@ -31,8 +31,8 @@ public static class ControllerExtensions
             var first = forwarded.Split(',')[0].Trim();
             if (System.Net.IPAddress.TryParse(first, out var forwardedIp))
             {
-                if (System.Net.IPAddress.IsIPv4MappedToIPv6(forwardedIp))
-                    forwardedIp = System.Net.IPAddress.MapToIPv4(forwardedIp);
+                if (forwardedIp.IsIPv4MappedToIPv6)
+                    forwardedIp = forwardedIp.MapToIPv4();
                 if (forwardedIp.Equals(System.Net.IPAddress.Loopback) || forwardedIp.Equals(System.Net.IPAddress.IPv6Loopback))
                     return true;
             }

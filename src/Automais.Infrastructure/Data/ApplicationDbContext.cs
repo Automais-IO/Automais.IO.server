@@ -27,6 +27,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<UserAllowedRoute> UserAllowedRoutes => Set<UserAllowedRoute>();
     public DbSet<RouterConfigLog> RouterConfigLogs => Set<RouterConfigLog>();
     public DbSet<RouterBackup> RouterBackups => Set<RouterBackup>();
+    public DbSet<Host> Hosts => Set<Host>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -644,6 +645,59 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.RouterId);
             entity.HasIndex(e => e.TenantId);
             entity.HasIndex(e => e.CreatedAt);
+        });
+
+        // Configuração de Host (Linux Ubuntu / futuros tipos)
+        modelBuilder.Entity<Host>(entity =>
+        {
+            entity.ToTable("hosts");
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.TenantId).IsRequired();
+            entity.Property(e => e.Name)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(e => e.HostKind)
+                .IsRequired()
+                .HasConversion<string>();
+
+            entity.Property(e => e.VpnIp)
+                .IsRequired()
+                .HasMaxLength(255);
+
+            entity.Property(e => e.SshPort)
+                .IsRequired();
+
+            entity.Property(e => e.SshUsername)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(e => e.SshPassword)
+                .HasMaxLength(500);
+
+            entity.Property(e => e.Status)
+                .IsRequired()
+                .HasConversion<string>();
+
+            entity.Property(e => e.Description)
+                .HasMaxLength(500);
+
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired();
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.VpnNetwork)
+                .WithMany()
+                .HasForeignKey(e => e.VpnNetworkId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.TenantId);
         });
     }
 }

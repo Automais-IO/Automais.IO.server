@@ -264,6 +264,8 @@ builder.Services.AddScoped<IRouterStaticRouteRepository, Automais.Infrastructure
 builder.Services.AddScoped<IUserAllowedRouteRepository, Automais.Infrastructure.Repositories.UserAllowedRouteRepository>();
 builder.Services.AddScoped<IRouterConfigLogRepository, RouterConfigLogRepository>();
 builder.Services.AddScoped<IRouterBackupRepository, RouterBackupRepository>();
+builder.Services.AddScoped<IHostRepository, HostRepository>();
+builder.Services.AddScoped<IHostService, HostService>();
 
 // Services
 builder.Services.AddScoped<ITenantService, TenantService>();
@@ -918,6 +920,152 @@ app.Map("/api/ws/routeros/{routerId:guid}", async (HttpContext context, Guid rou
                 CancellationToken.None);
         }
         logger.LogInformation("WebSocket desconectado para router {RouterId}", routerId);
+    }
+});
+
+// Proxy WebSocket para serviço Python hosts.io (SSH / console Linux) — porta 8766
+app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) =>
+{
+    if (!context.WebSockets.IsWebSocketRequest)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsync("Expected WebSocket request");
+        return;
+    }
+
+    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("WebSocket conectado para host {HostId}", hostId);
+
+    try
+    {
+        var hostRepository = context.RequestServices.GetRequiredService<Automais.Core.Interfaces.IHostRepository>();
+        var vpnNetworkRepository = context.RequestServices.GetRequiredService<Automais.Core.Interfaces.IVpnNetworkRepository>();
+        var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
+
+        var host = await hostRepository.GetByIdAsync(hostId, context.RequestAborted);
+        if (host == null)
+        {
+            await SendWebSocketErrorAndClose(webSocket, "Host não encontrado", logger);
+            return;
+        }
+
+        string? serverEndpoint = null;
+        if (host.VpnNetworkId.HasValue)
+        {
+            var vpnNetwork = await vpnNetworkRepository.GetByIdAsync(host.VpnNetworkId.Value, context.RequestAborted);
+            serverEndpoint = vpnNetwork?.ServerEndpoint;
+        }
+
+        var requestHost = context.Request.Host.Host;
+        var isHttps = context.Request.IsHttps ||
+                     context.Request.Headers["X-Forwarded-Proto"].ToString().Equals("https", StringComparison.OrdinalIgnoreCase);
+
+        string wsUrl;
+        const int hostsPythonPort = 8766;
+        if (string.IsNullOrWhiteSpace(serverEndpoint))
+        {
+            wsUrl = $"ws://localhost:{hostsPythonPort}";
+            logger.LogInformation("ServerEndpoint não configurado para host, usando localhost:{Port}", hostsPythonPort);
+        }
+        else
+        {
+            string endpointHost = serverEndpoint;
+            if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                endpointHost = serverEndpoint.Replace("http://", "").Split('/')[0].Split(':')[0];
+            else if (serverEndpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                endpointHost = serverEndpoint.Replace("https://", "").Split('/')[0].Split(':')[0];
+            else if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
+                     serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+                endpointHost = serverEndpoint.Replace("ws://", "").Replace("wss://", "").Split('/')[0].Split(':')[0];
+            else
+                endpointHost = serverEndpoint.Split('/')[0].Split(':')[0];
+
+            if (endpointHost.Equals(requestHost, StringComparison.OrdinalIgnoreCase) ||
+                endpointHost.Equals("automais.io", StringComparison.OrdinalIgnoreCase) ||
+                endpointHost.Equals("www.automais.io", StringComparison.OrdinalIgnoreCase))
+            {
+                wsUrl = $"ws://localhost:{hostsPythonPort}";
+                logger.LogInformation("ServerEndpoint {ServerEndpoint} é o mesmo domínio da API, usando localhost:{Port}", serverEndpoint, hostsPythonPort);
+            }
+            else
+            {
+                var wsProtocol = isHttps ? "wss://" : "ws://";
+                if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
+                    serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+                {
+                    wsUrl = serverEndpoint.Contains(':', StringComparison.Ordinal) &&
+                            !serverEndpoint.EndsWith("://", StringComparison.OrdinalIgnoreCase)
+                        ? serverEndpoint
+                        : $"{serverEndpoint}:{hostsPythonPort}";
+                }
+                else if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                {
+                    var endpointWithoutProtocol = serverEndpoint.Replace("http://", "");
+                    wsUrl = $"{wsProtocol}{endpointWithoutProtocol}:{hostsPythonPort}";
+                }
+                else if (serverEndpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    var endpointWithoutProtocol = serverEndpoint.Replace("https://", "");
+                    wsUrl = $"wss://{endpointWithoutProtocol}:{hostsPythonPort}";
+                }
+                else
+                    wsUrl = $"{wsProtocol}{serverEndpoint}:{hostsPythonPort}";
+            }
+        }
+
+        logger.LogInformation("Conectando ao hosts.io em {WsUrl} para host {HostId}", wsUrl, hostId);
+
+        var clientWebSocket = new System.Net.WebSockets.ClientWebSocket();
+        try
+        {
+            await clientWebSocket.ConnectAsync(new Uri(wsUrl), context.RequestAborted);
+            logger.LogInformation("Conectado ao serviço hosts.io para host {HostId}", hostId);
+
+            var cancellationToken = context.RequestAborted;
+            var clientToServer = ProxyWebSocketMessages(webSocket, clientWebSocket, cancellationToken, logger);
+            var serverToClient = ProxyWebSocketMessages(clientWebSocket, webSocket, cancellationToken, logger);
+            await Task.WhenAny(clientToServer, serverToClient);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Erro ao conectar ao hosts.io em {WsUrl} para host {HostId}", wsUrl, hostId);
+            await SendWebSocketErrorAndClose(webSocket, $"Erro ao conectar ao serviço Hosts: {ex.Message}", logger);
+        }
+        finally
+        {
+            if (clientWebSocket.State == WebSocketState.Open || clientWebSocket.State == WebSocketState.CloseReceived)
+            {
+                try
+                {
+                    await clientWebSocket.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Connection closed",
+                        CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Erro ao fechar conexão com hosts.io: {Error}", ex.Message);
+                }
+            }
+            clientWebSocket.Dispose();
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Erro no WebSocket proxy para host {HostId}", hostId);
+    }
+    finally
+    {
+        if (webSocket.State == System.Net.WebSockets.WebSocketState.Open ||
+            webSocket.State == System.Net.WebSockets.WebSocketState.CloseReceived)
+        {
+            await webSocket.CloseAsync(
+                System.Net.WebSockets.WebSocketCloseStatus.NormalClosure,
+                "Connection closed",
+                CancellationToken.None);
+        }
+        logger.LogInformation("WebSocket desconectado para host {HostId}", hostId);
     }
 });
 

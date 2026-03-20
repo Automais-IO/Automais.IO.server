@@ -10,6 +10,7 @@ public class HostDto
     public HostKind HostKind { get; set; }
     public Guid? VpnNetworkId { get; set; }
     public string? VpnNetworkServerEndpoint { get; set; }
+    /// <summary>IP do túnel na VPN (derivado de <c>vpn_peers.PeerIp</c>).</summary>
     public string VpnIp { get; set; } = string.Empty;
     public int SshPort { get; set; }
     public string SshUsername { get; set; } = string.Empty;
@@ -34,6 +35,9 @@ public class HostDto
     public bool? VpnPeerPingSuccess { get; set; }
     public double? VpnPeerPingPacketLoss { get; set; }
     public DateTime? VpnPeerLastHandshake { get; set; }
+
+    /// <summary>Último ciclo do monitor VPN no servidor (campo <c>ReachableViaVpn</c> em <c>vpn_peers</c>).</summary>
+    public bool? VpnPeerReachableViaVpn { get; set; }
 }
 
 public class CreateHostDto

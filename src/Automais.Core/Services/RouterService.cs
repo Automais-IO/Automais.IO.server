@@ -362,6 +362,7 @@ public class RouterService : IRouterService
         string? vpnTunnelIp = null;
         long? vpnBytesReceived = null;
         long? vpnBytesSent = null;
+        bool? vpnPeerReachableViaVpn = null;
         if (_vpnPeerRepository != null)
         {
             try
@@ -418,7 +419,8 @@ public class RouterService : IRouterService
             VpnPeerKeysConfigured = vpnPeerKeysConfigured,
             VpnTunnelIp = vpnTunnelIp,
             VpnBytesReceived = vpnBytesReceived,
-            VpnBytesSent = vpnBytesSent
+            VpnBytesSent = vpnBytesSent,
+            VpnPeerReachableViaVpn = vpnPeerReachableViaVpn
         };
     }
 

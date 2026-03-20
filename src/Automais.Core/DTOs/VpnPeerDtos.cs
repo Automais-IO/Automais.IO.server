@@ -19,6 +19,8 @@ public class VpnPeerDto
     public bool? PingSuccess { get; set; }
     public double? PingAvgTimeMs { get; set; }
     public double? PingPacketLoss { get; set; }
+    /// <summary>Último ciclo do monitor VPN: link considerado ativo (handshake recente ou ICMP).</summary>
+    public bool? ReachableViaVpn { get; set; }
     public bool IsEnabled { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -49,4 +51,5 @@ public class UpdatePeerStatsDto
     public bool? PingSuccess { get; set; }
     public double? PingAvgTimeMs { get; set; }
     public double? PingPacketLoss { get; set; }
+    public bool? ReachableViaVpn { get; set; }
 }

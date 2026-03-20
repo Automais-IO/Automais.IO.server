@@ -657,9 +657,6 @@ public class ApplicationDbContext : DbContext
                 .IsRequired()
                 .HasConversion<string>();
 
-            entity.Property(e => e.VpnIp)
-                .HasMaxLength(255);
-
             entity.Property(e => e.SshPort)
                 .IsRequired();
 

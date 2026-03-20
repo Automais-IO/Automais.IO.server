@@ -31,6 +31,9 @@ public class VpnPeer
 
     public double? PingPacketLoss { get; set; }
 
+    /// <summary>Último ciclo do serviço VPN: peer considerado acessível (handshake recente no túnel ou ICMP OK).</summary>
+    public bool? ReachableViaVpn { get; set; }
+
     public bool IsEnabled { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }

@@ -214,6 +214,11 @@ public class VpnPeerService : IVpnPeerService
         {
             peer.PingPacketLoss = dto.PingPacketLoss.Value;
         }
+
+        if (dto.ReachableViaVpn.HasValue)
+        {
+            peer.ReachableViaVpn = dto.ReachableViaVpn.Value;
+        }
         
         peer.UpdatedAt = DateTime.UtcNow;
 
@@ -331,6 +336,7 @@ public class VpnPeerService : IVpnPeerService
             PingSuccess = peer.PingSuccess,
             PingAvgTimeMs = peer.PingAvgTimeMs,
             PingPacketLoss = peer.PingPacketLoss,
+            ReachableViaVpn = peer.ReachableViaVpn,
             IsEnabled = peer.IsEnabled,
             CreatedAt = peer.CreatedAt,
             UpdatedAt = peer.UpdatedAt

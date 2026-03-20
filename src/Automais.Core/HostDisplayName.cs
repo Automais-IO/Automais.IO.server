@@ -8,6 +8,16 @@ namespace Automais.Core;
 /// </summary>
 public static class HostDisplayName
 {
+    /// <summary>Primeiro endereço IPv4 do túnel em <see cref="VpnPeer.PeerIp"/> (antes da vírgula e sem sufixo /cidr).</summary>
+    public static string PeerTunnelIpv4Only(VpnPeer? peer)
+    {
+        if (peer == null || string.IsNullOrWhiteSpace(peer.PeerIp))
+            return string.Empty;
+        var first = peer.PeerIp.Split(',')[0].Trim();
+        var slash = first.IndexOf('/');
+        return slash >= 0 ? first[..slash].Trim() : first;
+    }
+
     public static string ForUi(Host host, VpnPeer? peer)
     {
         var raw = (host.Name ?? string.Empty).Trim();
@@ -25,11 +35,15 @@ public static class HostDisplayName
                     return line.Trim();
             }
 
-            return string.IsNullOrWhiteSpace(host.VpnIp) ? "Host" : $"Host {host.VpnIp}";
+            var tip = PeerTunnelIpv4Only(peer);
+            return string.IsNullOrWhiteSpace(tip) ? "Host" : $"Host {tip}";
         }
 
         if (string.IsNullOrEmpty(raw))
-            return string.IsNullOrWhiteSpace(host.VpnIp) ? "Host" : $"Host {host.VpnIp}";
+        {
+            var tip = PeerTunnelIpv4Only(peer);
+            return string.IsNullOrWhiteSpace(tip) ? "Host" : $"Host {tip}";
+        }
 
         return raw;
     }

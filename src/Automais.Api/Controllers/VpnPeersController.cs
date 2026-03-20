@@ -1,3 +1,4 @@
+using Automais.Api.Extensions;
 using Automais.Core.DTOs;
 using Automais.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -14,13 +15,16 @@ public class VpnPeersController : ControllerBase
 {
     private readonly IVpnPeerService _vpnPeerService;
     private readonly ILogger<VpnPeersController> _logger;
+    private readonly IConfiguration _configuration;
 
     public VpnPeersController(
         IVpnPeerService vpnPeerService,
-        ILogger<VpnPeersController> logger)
+        ILogger<VpnPeersController> logger,
+        IConfiguration configuration)
     {
         _vpnPeerService = vpnPeerService;
         _logger = logger;
+        _configuration = configuration;
     }
 
     [HttpGet("routers/{routerId:guid}/vpn/peers")]
@@ -209,6 +213,11 @@ public class VpnPeersController : ControllerBase
     [HttpPatch("vpn/peers/{id:guid}/stats")]
     public async Task<IActionResult> UpdatePeerStats(Guid id, [FromBody] UpdatePeerStatsDto dto, CancellationToken cancellationToken)
     {
+        if (!HttpContext.IsLocalRequest() && !HttpContext.IsInternalRequest(_configuration))
+        {
+            return StatusCode(403, new { message = "Acesso negado. Use X-Automais-Internal-Key (serviço VPN) ou requisição local." });
+        }
+
         try
         {
             await _vpnPeerService.UpdatePeerStatsAsync(id, dto, cancellationToken);

@@ -17,9 +17,6 @@ public class Host
     /// <summary>Peer VPN na tabela <c>vpn_peers</c> (host sem router MikroTik).</summary>
     public Guid? VpnPeerId { get; set; }
 
-    /// <summary>IP do host na rede VPN (sem máscara, ex.: "10.100.1.50").</summary>
-    public string VpnIp { get; set; } = string.Empty;
-
     public int SshPort { get; set; } = 22;
 
     /// <summary>Usuário SSH criado pelo bootstrap (padrão: automais-io).</summary>

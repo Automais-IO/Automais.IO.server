@@ -88,8 +88,6 @@ public class HostService : IHostService
         else
             allocatedIp = await _ipAlloc.AllocateNextIpAsync(dto.VpnNetworkId, VpnResourceKind.Host, hostId, dto.Name.Trim(), cancellationToken);
 
-        var ipOnly = allocatedIp.Split('/')[0];
-
         var (wgPub, wgPriv) = await VpnTunnelKeyGenerator.GenerateKeyPairAsync(cancellationToken);
         var (sshPriv, sshPub) = await SshKeyGenerator.GenerateEd25519KeyPairAsync(cancellationToken);
 
@@ -103,7 +101,6 @@ public class HostService : IHostService
             Name = dto.Name.Trim(),
             HostKind = dto.HostKind,
             VpnNetworkId = dto.VpnNetworkId,
-            VpnIp = ipOnly,
             SshPort = dto.SshPort > 0 ? dto.SshPort : 22,
             SshUsername = "automais-io",
             SshPrivateKey = sshPriv,
@@ -152,7 +149,33 @@ public class HostService : IHostService
         if (dto.HostKind.HasValue)
             host.HostKind = dto.HostKind.Value;
         if (dto.VpnIp != null)
-            host.VpnIp = dto.VpnIp.Split('/')[0].Trim();
+        {
+            var trimmed = dto.VpnIp.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+                throw new InvalidOperationException("VpnIp não pode ser vazio.");
+            if (!host.VpnPeerId.HasValue)
+                throw new InvalidOperationException("Host sem peer VPN; associe um peer antes de definir VpnIp.");
+
+            var peerForIp = await _peerRepo.GetByIdAsync(host.VpnPeerId.Value, cancellationToken)
+                ?? throw new InvalidOperationException("Peer VPN não encontrado.");
+            var networkId = host.VpnNetworkId ?? peerForIp.VpnNetworkId;
+            var newIpOnly = trimmed.Split('/')[0].Trim();
+            var currentIp = HostDisplayName.PeerTunnelIpv4Only(peerForIp);
+            if (!string.Equals(newIpOnly, currentIp, StringComparison.OrdinalIgnoreCase))
+            {
+                var allocated = await _ipAlloc.AllocateManualIpAsync(
+                    networkId,
+                    trimmed,
+                    VpnResourceKind.Host,
+                    host.Id,
+                    host.Name,
+                    cancellationToken);
+                peerForIp.PeerIp = allocated.Contains('/') ? allocated : $"{allocated}/32";
+                peerForIp.UpdatedAt = DateTime.UtcNow;
+                await _peerRepo.UpdateAsync(peerForIp, cancellationToken);
+            }
+        }
+
         if (dto.ProvisioningStatus.HasValue)
             host.ProvisioningStatus = dto.ProvisioningStatus.Value;
         if (dto.Status.HasValue)
@@ -328,7 +351,7 @@ public class HostService : IHostService
 
         sb.AppendLine("echo ''");
         sb.AppendLine("echo '=== Automais.IO Host Setup concluído! ==='");
-        sb.AppendLine($"echo 'IP na VPN: {host.VpnIp}'");
+        sb.AppendLine($"echo 'IP na VPN: {HostDisplayName.PeerTunnelIpv4Only(peer)}'");
         sb.AppendLine($"echo 'Porta SSH: {host.SshPort}'");
         sb.AppendLine("echo 'Usuário: automais-io'");
 
@@ -351,7 +374,7 @@ public class HostService : IHostService
             HostKind = h.HostKind,
             VpnNetworkId = h.VpnNetworkId,
             VpnNetworkServerEndpoint = h.VpnNetwork?.ServerEndpoint,
-            VpnIp = h.VpnIp,
+            VpnIp = HostDisplayName.PeerTunnelIpv4Only(peer),
             SshPort = h.SshPort,
             SshUsername = h.SshUsername,
             ProvisioningStatus = h.ProvisioningStatus,
@@ -368,7 +391,8 @@ public class HostService : IHostService
             VpnPeerPingAvgTimeMs = peer?.PingAvgTimeMs,
             VpnPeerPingSuccess = peer?.PingSuccess,
             VpnPeerPingPacketLoss = peer?.PingPacketLoss,
-            VpnPeerLastHandshake = peer?.LastHandshake
+            VpnPeerLastHandshake = peer?.LastHandshake,
+            VpnPeerReachableViaVpn = peer?.ReachableViaVpn
         };
     }
 
@@ -388,7 +412,7 @@ public class HostService : IHostService
             HostKind = h.HostKind,
             VpnNetworkId = h.VpnNetworkId,
             VpnNetworkServerEndpoint = h.VpnNetwork?.ServerEndpoint,
-            VpnIp = h.VpnIp,
+            VpnIp = HostDisplayName.PeerTunnelIpv4Only(peer),
             SshPort = h.SshPort,
             SshUsername = h.SshUsername,
             ProvisioningStatus = h.ProvisioningStatus,
@@ -406,6 +430,7 @@ public class HostService : IHostService
             VpnPeerPingSuccess = peer?.PingSuccess,
             VpnPeerPingPacketLoss = peer?.PingPacketLoss,
             VpnPeerLastHandshake = peer?.LastHandshake,
+            VpnPeerReachableViaVpn = peer?.ReachableViaVpn,
             SshPrivateKey = h.SshPrivateKey,
             SshPassword = h.SshPassword
         };

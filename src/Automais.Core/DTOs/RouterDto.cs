@@ -51,6 +51,8 @@ public class RouterDto
     public long? VpnBytesReceived { get; set; }
     /// <summary>Bytes enviados pelo servidor para este peer.</summary>
     public long? VpnBytesSent { get; set; }
+    /// <summary>Último ciclo do monitor VPN: peer alcançável (ICMP ou handshake recente).</summary>
+    public bool? VpnPeerReachableViaVpn { get; set; }
 }
 
 /// <summary>

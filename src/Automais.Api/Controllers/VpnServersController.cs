@@ -295,7 +295,14 @@ public class VpnServersController : ControllerBase
                     router_id = rid,
                     host_id = hid,
                     resource_name = resName,
-                    host_provisioning_status = hostProvisioning
+                    host_provisioning_status = hostProvisioning,
+                    last_handshake = p.LastHandshake,
+                    bytes_received = p.BytesReceived,
+                    bytes_sent = p.BytesSent,
+                    ping_success = p.PingSuccess,
+                    ping_avg_time_ms = p.PingAvgTimeMs,
+                    ping_packet_loss = p.PingPacketLoss,
+                    reachable_via_vpn = p.ReachableViaVpn
                 });
             }
 

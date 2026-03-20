@@ -958,67 +958,84 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
             return;
         }
 
-        string? serverEndpoint = null;
-        if (host.VpnNetworkId.HasValue)
-        {
-            var vpnNetwork = await vpnNetworkRepository.GetByIdAsync(host.VpnNetworkId.Value, context.RequestAborted);
-            serverEndpoint = vpnNetwork?.ServerEndpoint;
-        }
-
         var requestHost = context.Request.Host.Host;
         var isHttps = context.Request.IsHttps ||
                      context.Request.Headers["X-Forwarded-Proto"].ToString().Equals("https", StringComparison.OrdinalIgnoreCase);
 
-        string wsUrl;
         const int hostsPythonPort = 8766;
-        if (string.IsNullOrWhiteSpace(serverEndpoint))
+        string wsUrl;
+
+        // Override explícito (Docker, hosts em outro host, etc.) — ver deploy/nginx e docs/hosts-websocket.md
+        var configuredBackend = configuration["HostsWebSocket:BackendUrl"]?.Trim();
+        if (!string.IsNullOrWhiteSpace(configuredBackend))
         {
-            wsUrl = $"ws://localhost:{hostsPythonPort}";
-            logger.LogInformation("ServerEndpoint não configurado para host, usando localhost:{Port}", hostsPythonPort);
+            wsUrl = configuredBackend.TrimEnd('/');
+            if (!wsUrl.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) &&
+                !wsUrl.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+            {
+                wsUrl = $"ws://{wsUrl}";
+            }
+
+            logger.LogInformation("Hosts WebSocket: HostsWebSocket:BackendUrl → {WsUrl}", wsUrl);
         }
         else
         {
-            string endpointHost = serverEndpoint;
-            if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-                endpointHost = serverEndpoint.Replace("http://", "").Split('/')[0].Split(':')[0];
-            else if (serverEndpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                endpointHost = serverEndpoint.Replace("https://", "").Split('/')[0].Split(':')[0];
-            else if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
-                     serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
-                endpointHost = serverEndpoint.Replace("ws://", "").Replace("wss://", "").Split('/')[0].Split(':')[0];
-            else
-                endpointHost = serverEndpoint.Split('/')[0].Split(':')[0];
+            string? serverEndpoint = null;
+            if (host.VpnNetworkId.HasValue)
+            {
+                var vpnNetwork = await vpnNetworkRepository.GetByIdAsync(host.VpnNetworkId.Value, context.RequestAborted);
+                serverEndpoint = vpnNetwork?.ServerEndpoint;
+            }
 
-            if (endpointHost.Equals(requestHost, StringComparison.OrdinalIgnoreCase) ||
-                endpointHost.Equals("automais.io", StringComparison.OrdinalIgnoreCase) ||
-                endpointHost.Equals("www.automais.io", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(serverEndpoint))
             {
                 wsUrl = $"ws://localhost:{hostsPythonPort}";
-                logger.LogInformation("ServerEndpoint {ServerEndpoint} é o mesmo domínio da API, usando localhost:{Port}", serverEndpoint, hostsPythonPort);
+                logger.LogInformation("ServerEndpoint não configurado para host, usando localhost:{Port}", hostsPythonPort);
             }
             else
             {
-                var wsProtocol = isHttps ? "wss://" : "ws://";
-                if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
-                    serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
-                {
-                    wsUrl = serverEndpoint.Contains(':', StringComparison.Ordinal) &&
-                            !serverEndpoint.EndsWith("://", StringComparison.OrdinalIgnoreCase)
-                        ? serverEndpoint
-                        : $"{serverEndpoint}:{hostsPythonPort}";
-                }
-                else if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-                {
-                    var endpointWithoutProtocol = serverEndpoint.Replace("http://", "");
-                    wsUrl = $"{wsProtocol}{endpointWithoutProtocol}:{hostsPythonPort}";
-                }
+                string endpointHost = serverEndpoint;
+                if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                    endpointHost = serverEndpoint.Replace("http://", "").Split('/')[0].Split(':')[0];
                 else if (serverEndpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    endpointHost = serverEndpoint.Replace("https://", "").Split('/')[0].Split(':')[0];
+                else if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
+                         serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+                    endpointHost = serverEndpoint.Replace("ws://", "").Replace("wss://", "").Split('/')[0].Split(':')[0];
+                else
+                    endpointHost = serverEndpoint.Split('/')[0].Split(':')[0];
+
+                if (endpointHost.Equals(requestHost, StringComparison.OrdinalIgnoreCase) ||
+                    endpointHost.Equals("automais.io", StringComparison.OrdinalIgnoreCase) ||
+                    endpointHost.Equals("www.automais.io", StringComparison.OrdinalIgnoreCase))
                 {
-                    var endpointWithoutProtocol = serverEndpoint.Replace("https://", "");
-                    wsUrl = $"wss://{endpointWithoutProtocol}:{hostsPythonPort}";
+                    wsUrl = $"ws://localhost:{hostsPythonPort}";
+                    logger.LogInformation("ServerEndpoint {ServerEndpoint} é o mesmo domínio da API, usando localhost:{Port}", serverEndpoint, hostsPythonPort);
                 }
                 else
-                    wsUrl = $"{wsProtocol}{serverEndpoint}:{hostsPythonPort}";
+                {
+                    var wsProtocol = isHttps ? "wss://" : "ws://";
+                    if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
+                        serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        wsUrl = serverEndpoint.Contains(':', StringComparison.Ordinal) &&
+                                !serverEndpoint.EndsWith("://", StringComparison.OrdinalIgnoreCase)
+                            ? serverEndpoint
+                            : $"{serverEndpoint}:{hostsPythonPort}";
+                    }
+                    else if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var endpointWithoutProtocol = serverEndpoint.Replace("http://", "");
+                        wsUrl = $"{wsProtocol}{endpointWithoutProtocol}:{hostsPythonPort}";
+                    }
+                    else if (serverEndpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var endpointWithoutProtocol = serverEndpoint.Replace("https://", "");
+                        wsUrl = $"wss://{endpointWithoutProtocol}:{hostsPythonPort}";
+                    }
+                    else
+                        wsUrl = $"{wsProtocol}{serverEndpoint}:{hostsPythonPort}";
+                }
             }
         }
 

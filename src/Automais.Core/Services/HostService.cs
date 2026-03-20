@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Automais.Core;
 using Automais.Core.DTOs;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
@@ -346,7 +347,7 @@ public class HostService : IHostService
         {
             Id = h.Id,
             TenantId = h.TenantId,
-            Name = h.Name,
+            Name = HostDisplayName.ForUi(h, peer),
             HostKind = h.HostKind,
             VpnNetworkId = h.VpnNetworkId,
             VpnNetworkServerEndpoint = h.VpnNetwork?.ServerEndpoint,
@@ -383,7 +384,7 @@ public class HostService : IHostService
         {
             Id = h.Id,
             TenantId = h.TenantId,
-            Name = h.Name,
+            Name = HostDisplayName.ForUi(h, peer),
             HostKind = h.HostKind,
             VpnNetworkId = h.VpnNetworkId,
             VpnNetworkServerEndpoint = h.VpnNetwork?.ServerEndpoint,

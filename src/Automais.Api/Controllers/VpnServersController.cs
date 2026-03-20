@@ -1,4 +1,5 @@
 using Automais.Api.Extensions;
+using Automais.Core;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
 using Automais.Core.Services;
@@ -168,13 +169,26 @@ public class VpnServersController : ControllerBase
 
             var hostsManaged = await _hostRepository.GetByVpnNetworkIdsAsync(vpnNetworkIds, cancellationToken);
             var hostsPayload = new List<object>();
+            var hostSkippedNoVpnPeerId = 0;
+            var hostSkippedInvalidPeer = 0;
             foreach (var host in hostsManaged)
             {
                 if (!host.VpnPeerId.HasValue)
+                {
+                    hostSkippedNoVpnPeerId++;
                     continue;
+                }
+
                 var hp = await _peerRepository.GetByIdAsync(host.VpnPeerId.Value, cancellationToken);
                 if (hp == null || !hp.IsEnabled || string.IsNullOrEmpty(hp.PublicKey) || string.IsNullOrEmpty(hp.PeerIp))
+                {
+                    hostSkippedInvalidPeer++;
+                    _logger.LogWarning(
+                        "Host {HostId} tem VpnPeerId {PeerId} mas o peer não existe, está desabilitado ou sem chave/IP — não entra em vpn_peers.",
+                        host.Id,
+                        host.VpnPeerId.Value);
                     continue;
+                }
 
                 var allowedListH = allowedByPeer.GetValueOrDefault(hp.Id) ?? new List<string>();
                 var remoteListH = remoteByPeer.GetValueOrDefault(hp.Id) ?? new List<string>();
@@ -193,7 +207,7 @@ public class VpnServersController : ControllerBase
                 hostsPayload.Add(new
                 {
                     id = host.Id.ToString(),
-                    name = host.Name,
+                    name = HostDisplayName.ForUi(host, hp),
                     vpn_network_id = host.VpnNetworkId?.ToString(),
                     peers = new[]
                     {
@@ -245,7 +259,7 @@ public class VpnServersController : ControllerBase
                 if (hostByPeerId.TryGetValue(p.Id, out var ht))
                 {
                     hid = ht.Id.ToString();
-                    hname = ht.Name;
+                    hname = HostDisplayName.ForUi(ht, p);
                     hostProvisioning = ht.ProvisioningStatus.ToString();
                 }
 
@@ -285,9 +299,30 @@ public class VpnServersController : ControllerBase
                 });
             }
 
+            if (hostSkippedNoVpnPeerId > 0)
+            {
+                _logger.LogWarning(
+                    "Endpoint '{Endpoint}': {Count} host(s) na rede VPN sem VpnPeerId — ficam de fora de hosts[] e de vpn_peers até associar um peer (cada host precisa de linha em vpn_peers e FK em hosts).",
+                    endpoint,
+                    hostSkippedNoVpnPeerId);
+            }
+
+            if (hostSkippedInvalidPeer > 0)
+            {
+                _logger.LogWarning(
+                    "Endpoint '{Endpoint}': {Count} host(s) com VpnPeerId apontando para peer inexistente, desabilitado ou sem chave/IP.",
+                    endpoint,
+                    hostSkippedInvalidPeer);
+            }
+
             _logger.LogInformation(
-                "Servidor VPN com endpoint '{Endpoint}' gerencia {VpnCount} VPNs, {RouterCount} Routers, {HostCount} Hosts, {PeerCount} vpn_peers",
-                endpoint, vpnNetworks.Count, routers.Count, hostsPayload.Count, vpnPeersFlat.Count);
+                "Endpoint '{Endpoint}': {VpnCount} rede(s) VPN; {RouterCount} dispositivo(s) MikroTik (routers[]); {HostOk} host(s) com peer OK (hosts[]); {FlatPeerCount} entrada(s) em vpn_peers (lista plana, peers habilitados); {DbPeerCount} linha(s) total em vpn_peers nessas redes.",
+                endpoint,
+                vpnNetworks.Count,
+                routers.Count,
+                hostsPayload.Count,
+                vpnPeersFlat.Count,
+                allPeersForNetworks.Count());
 
             return Ok(new
             {

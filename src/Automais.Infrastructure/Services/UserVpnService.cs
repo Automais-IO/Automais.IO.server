@@ -52,7 +52,7 @@ public class UserVpnService : IUserVpnService
             throw new InvalidOperationException("Nenhuma rede VPN configurada para o tenant.");
         }
 
-        // Gerar configuração WireGuard
+        // Gerar configuração do cliente VPN
         var configContent = await GenerateUserConfigContentAsync(user, vpnNetwork, cancellationToken);
         var fileName = SanitizeFileName($"automais-{user.Email.Replace("@", "_")}.conf");
 
@@ -108,8 +108,8 @@ public class UserVpnService : IUserVpnService
             throw new InvalidOperationException("Nenhuma rede VPN configurada para o tenant.");
         }
 
-        // Gerar chaves WireGuard
-        var (publicKey, privateKey) = await GenerateWireGuardKeysAsync(cancellationToken);
+        // Gerar chaves do túnel VPN
+        var (publicKey, privateKey) = await GenerateVpnTunnelKeysAsync(cancellationToken);
 
         // Alocar IP na rede VPN
         var userIp = await AllocateUserVpnIpAsync(vpnNetwork, cancellationToken);
@@ -126,8 +126,8 @@ public class UserVpnService : IUserVpnService
 
         await _userRepository.UpdateAsync(user, cancellationToken);
 
-        // Adicionar peer no servidor WireGuard
-        await AddPeerToWireGuardServerAsync(vpnNetwork, publicKey, userIp, cancellationToken);
+        // Adicionar peer no servidor VPN
+        await AddPeerToVpnServerAsync(vpnNetwork, publicKey, userIp, cancellationToken);
 
         _logger?.LogInformation("Usuário {UserId} ({Email}) provisionado na VPN com IP {Ip}", 
             userId, user.Email, userIp);
@@ -175,7 +175,7 @@ public class UserVpnService : IUserVpnService
         return sb.ToString();
     }
 
-    private async Task<(string publicKey, string privateKey)> GenerateWireGuardKeysAsync(CancellationToken cancellationToken)
+    private async Task<(string publicKey, string privateKey)> GenerateVpnTunnelKeysAsync(CancellationToken cancellationToken)
     {
         // Gerar chave privada
         var privateKeyProcess = new Process
@@ -197,7 +197,7 @@ public class UserVpnService : IUserVpnService
 
         if (privateKeyProcess.ExitCode != 0 || string.IsNullOrEmpty(privateKey))
         {
-            throw new InvalidOperationException("Erro ao gerar chave privada WireGuard");
+            throw new InvalidOperationException("Erro ao gerar chave privada do túnel VPN");
         }
 
         // Gerar chave pública a partir da privada
@@ -225,7 +225,7 @@ public class UserVpnService : IUserVpnService
 
         if (publicKeyProcess.ExitCode != 0 || string.IsNullOrEmpty(publicKey))
         {
-            throw new InvalidOperationException("Erro ao gerar chave pública WireGuard");
+            throw new InvalidOperationException("Erro ao gerar chave pública do túnel VPN");
         }
 
         return (publicKey, privateKey);
@@ -345,7 +345,7 @@ public class UserVpnService : IUserVpnService
         return $"wg-{vpnNetworkId.ToString("N")[..8]}";
     }
 
-    private async Task AddPeerToWireGuardServerAsync(
+    private async Task AddPeerToVpnServerAsync(
         VpnNetwork vpnNetwork,
         string publicKey,
         string allowedIp,
@@ -374,13 +374,13 @@ public class UserVpnService : IUserVpnService
 
             if (process.ExitCode != 0)
             {
-                _logger?.LogWarning("Erro ao adicionar peer ao WireGuard: {Error}", error);
+                _logger?.LogWarning("Erro ao adicionar peer ao servidor VPN: {Error}", error);
                 // Não lançar exceção - pode ser que o peer já exista
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Erro ao adicionar peer ao servidor WireGuard");
+            _logger?.LogWarning(ex, "Erro ao adicionar peer ao servidor VPN");
             // Não lançar exceção - tentativa de adicionar peer
         }
     }

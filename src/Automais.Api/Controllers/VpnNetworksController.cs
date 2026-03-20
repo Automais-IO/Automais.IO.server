@@ -205,7 +205,7 @@ public class VpnNetworksController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Erro ao gerar chaves WireGuard do servidor");
+            _logger.LogWarning(ex, "Erro ao gerar chaves do servidor VPN");
             return BadRequest(new { message = ex.Message });
         }
     }

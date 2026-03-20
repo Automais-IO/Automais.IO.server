@@ -26,9 +26,9 @@ public interface IRouterOsServiceClient
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lista interfaces WireGuard do RouterOS
+    /// Lista interfaces de túnel VPN no RouterOS
     /// </summary>
-    Task<List<RouterOsWireGuardInterfaceDto>> ListWireGuardInterfacesAsync(
+    Task<List<RouterOsVpnTunnelInterfaceDto>> ListVpnTunnelInterfacesAsync(
         Guid routerId,
         CancellationToken cancellationToken = default);
 }

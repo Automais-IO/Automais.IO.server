@@ -38,21 +38,19 @@ public class RouterDto
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     /// <summary>
-    /// Redes destino: redes para as quais o tráfego VPN é encaminhado via este router (iptables/WG). Ex: ["10.0.1.0/24", "192.168.100.0/24"]
+    /// Redes destino: redes para as quais o tráfego VPN é encaminhado via este router. Ex: ["10.0.1.0/24", "192.168.100.0/24"]
     /// </summary>
     public IEnumerable<string>? AllowedNetworks { get; set; }
     /// <summary>FK para <c>vpn_peers</c> (peer principal do router).</summary>
     public Guid? VpnPeerId { get; set; }
-    /// <summary>Compat.: mesmo valor que <see cref="VpnPeerId"/>.</summary>
-    public Guid? WireGuardPeerId { get; set; }
-    /// <summary>True se o peer tem public e private key preenchidos.</summary>
-    public bool WireGuardPeerKeysConfigured { get; set; }
+    /// <summary>True se o peer tem chave pública e privada preenchidas.</summary>
+    public bool VpnPeerKeysConfigured { get; set; }
     /// <summary>IP do peer na VPN (extraído do PeerIp do peer). Endereço usado para conectar ao router (API/ping).</summary>
     public string? VpnTunnelIp { get; set; }
     /// <summary>Bytes recebidos pelo servidor deste peer (tráfego vindo do router).</summary>
-    public long? WireGuardBytesReceived { get; set; }
+    public long? VpnBytesReceived { get; set; }
     /// <summary>Bytes enviados pelo servidor para este peer.</summary>
-    public long? WireGuardBytesSent { get; set; }
+    public long? VpnBytesSent { get; set; }
 }
 
 /// <summary>

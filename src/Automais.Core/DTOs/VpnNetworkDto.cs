@@ -15,7 +15,7 @@ public class VpnNetworkDto
     /// O frontend deve sempre enviar este valor (preenchido com "automais.io" por padrão, mas editável).
     /// </summary>
     public string? ServerEndpoint { get; set; }
-    /// <summary>Porta UDP WireGuard no servidor (única por ServerEndpoint).</summary>
+    /// <summary>Porta UDP do túnel no servidor (única por ServerEndpoint).</summary>
     public int ListenPort { get; set; }
     /// <summary>True se ServerPrivateKey e ServerPublicKey estão preenchidos no banco.</summary>
     public bool ServerKeysConfigured { get; set; }
@@ -56,7 +56,7 @@ public class UpdateVpnNetworkDto
     /// </summary>
     public string? ServerEndpoint { get; set; }
     /// <summary>
-    /// Chave pública do servidor WireGuard. Preenchida automaticamente pela API ao obter do VPN server,
+    /// Chave pública do servidor VPN. Preenchida automaticamente pela API ao obter do servidor,
     /// ou manualmente se o servidor for externo.
     /// </summary>
     public string? ServerPublicKey { get; set; }

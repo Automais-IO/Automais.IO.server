@@ -71,7 +71,7 @@ public class HostService : IHostService
 
         var ipOnly = allocatedIp.Split('/')[0];
 
-        var (wgPub, wgPriv) = await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+        var (wgPub, wgPriv) = await VpnTunnelKeyGenerator.GenerateKeyPairAsync(cancellationToken);
         var (sshPriv, sshPub) = await SshKeyGenerator.GenerateEd25519KeyPairAsync(cancellationToken);
 
         var host = new Host
@@ -188,8 +188,7 @@ public class HostService : IHostService
             CreatedAt = h.CreatedAt,
             UpdatedAt = h.UpdatedAt,
             VpnPeerId = vpnPeerId,
-            WireGuardPeerId = vpnPeerId,
-            WireGuardPeerKeysConfigured = peer != null && !string.IsNullOrEmpty(peer.PublicKey) && !string.IsNullOrEmpty(peer.PrivateKey)
+            VpnPeerKeysConfigured = peer != null && !string.IsNullOrEmpty(peer.PublicKey) && !string.IsNullOrEmpty(peer.PrivateKey)
         };
     }
 }

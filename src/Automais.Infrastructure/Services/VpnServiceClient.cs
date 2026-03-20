@@ -22,6 +22,9 @@ public class VpnServiceOptions
 /// Cada router pode estar associado a uma VpnNetwork diferente, que por sua vez pode ter um ServerEndpoint diferente.
 /// O ServerEndpoint identifica qual servidor VPN físico gerencia aquela rede.
 /// </summary>
+/// <remarks>
+/// Agente de IA: o serviço remoto implementa túneis <strong>WireGuard</strong>; rotas e payloads usam prefixo "vpn" por convenção de produto.
+/// </remarks>
 public class VpnServiceClient : IVpnServiceClient
 {
     private readonly HttpClient _httpClient;

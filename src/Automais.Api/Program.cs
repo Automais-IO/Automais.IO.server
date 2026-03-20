@@ -275,9 +275,9 @@ builder.Services.AddScoped<IEmailService, Automais.Infrastructure.Services.Email
 builder.Services.AddScoped<ITenantUserService, TenantUserService>();
 builder.Services.AddScoped<IApplicationService, ApplicationService>();
 builder.Services.AddScoped<IDeviceService, DeviceService>();
-// Configuração do WireGuard (mantido para compatibilidade, mas não usado mais)
-builder.Services.Configure<WireGuardSettings>(
-    builder.Configuration.GetSection("WireGuard"));
+// Padrões do servidor VPN (endpoint default, etc.)
+builder.Services.Configure<VpnDefaultsSettings>(
+    builder.Configuration.GetSection("Vpn"));
 
 // Configuração do serviço VPN Python
 builder.Services.Configure<Automais.Infrastructure.Services.VpnServiceOptions>(
@@ -341,9 +341,8 @@ builder.Services.AddScoped<IVpnPeerService>(sp =>
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
     var vpnNetworkRepo = sp.GetRequiredService<IVpnNetworkRepository>();
     var vpnServiceClient = sp.GetRequiredService<Automais.Core.Interfaces.IVpnServiceClient>();
-    var wireGuardSettings = sp.GetRequiredService<IOptions<WireGuardSettings>>();
     var logger = sp.GetService<ILogger<Automais.Core.Services.VpnPeerService>>();
-    return new Automais.Core.Services.VpnPeerService(peerRepo, routerRepo, vpnNetworkRepo, wireGuardSettings, vpnServiceClient, logger);
+    return new Automais.Core.Services.VpnPeerService(peerRepo, routerRepo, vpnNetworkRepo, vpnServiceClient, logger);
 });
 
 builder.Services.AddScoped<IVpnNetworkService>(sp =>
@@ -352,10 +351,10 @@ builder.Services.AddScoped<IVpnNetworkService>(sp =>
     var vpnNetworkRepo = sp.GetRequiredService<IVpnNetworkRepository>();
     var deviceRepo = sp.GetRequiredService<IDeviceRepository>();
     var tenantUserService = sp.GetRequiredService<ITenantUserService>();
-    var wireGuardSettings = sp.GetRequiredService<IOptions<WireGuardSettings>>();
+    var vpnDefaults = sp.GetRequiredService<IOptions<VpnDefaultsSettings>>();
     var vpnServiceClient = sp.GetService<Automais.Core.Interfaces.IVpnServiceClient>();
     var vpnPeerService = sp.GetRequiredService<IVpnPeerService>();
-    return new VpnNetworkService(tenantRepo, vpnNetworkRepo, deviceRepo, tenantUserService, wireGuardSettings, vpnServiceClient, vpnPeerService);
+    return new VpnNetworkService(tenantRepo, vpnNetworkRepo, deviceRepo, tenantUserService, vpnDefaults, vpnServiceClient, vpnPeerService);
 });
 
 // Registrar RouterService com IVpnPeerService como dependência opcional

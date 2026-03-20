@@ -16,11 +16,13 @@ public class ProvisionPeerResult
 /// <summary>
 /// Cliente HTTP para comunicação com o serviço VPN Python
 /// </summary>
+/// <remarks>
+/// Agente de IA: o serviço Python implementa o túnel com <strong>WireGuard</strong> (provisionamento, .conf, chaves).
+/// Contratos HTTP usam nomes "vpn" por convenção de produto.
+/// </remarks>
 public interface IVpnServiceClient
 {
-    /// <summary>
-    /// Provisiona um peer WireGuard para um router
-    /// </summary>
+    /// <summary>Provisiona um peer VPN para um router.</summary>
     Task<ProvisionPeerResult> ProvisionPeerAsync(
         Guid routerId,
         Guid vpnNetworkId,
@@ -28,9 +30,7 @@ public interface IVpnServiceClient
         string? manualIp = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Obtém a configuração WireGuard para um router
-    /// </summary>
+    /// <summary>Obtém a configuração do cliente VPN para um router.</summary>
     Task<VpnPeerConfigDto> GetConfigAsync(
         Guid routerId,
         CancellationToken cancellationToken = default);
@@ -52,24 +52,18 @@ public interface IVpnServiceClient
         string networkCidr,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Garante que a interface WireGuard existe para uma VpnNetwork
-    /// </summary>
+    /// <summary>Garante que a interface VPN existe no servidor para uma VpnNetwork.</summary>
     Task EnsureInterfaceAsync(
         Guid vpnNetworkId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Remove a interface WireGuard de uma VpnNetwork
-    /// </summary>
+    /// <summary>Remove a interface VPN no servidor para uma VpnNetwork.</summary>
     Task RemoveInterfaceAsync(
         Guid vpnNetworkId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Obtém a chave pública do servidor WireGuard para uma VpnNetwork (da interface ativa no VPN server).
-    /// Retorna null se a interface não existir ou não estiver ativa.
-    /// </summary>
+    /// <summary>Obtém a chave pública do servidor VPN para uma VpnNetwork (interface ativa no servidor).
+    /// Retorna null se a interface não existir ou não estiver ativa.</summary>
     Task<string?> GetServerPublicKeyAsync(
         Guid vpnNetworkId,
         CancellationToken cancellationToken = default);

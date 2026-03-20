@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 namespace Automais.Core.Services;
 
 /// <summary>
-/// Gera par de chaves WireGuard via <c>wg genkey</c> / <c>wg pubkey</c>.
+/// Gera par de chaves do túnel VPN (ferramenta <c>wg</c> no sistema).
 /// </summary>
-public static class WireGuardKeyGenerator
+public static class VpnTunnelKeyGenerator
 {
     private static string WgExecutable =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "wg" : "/usr/bin/wg";
@@ -35,7 +35,7 @@ public static class WireGuardKeyGenerator
         if (privateKeyProcess.ExitCode != 0 || string.IsNullOrEmpty(privateKey))
         {
             throw new InvalidOperationException(
-                "Erro ao gerar chave privada WireGuard (wg genkey). Verifique se o WireGuard tools está instalado no servidor da API.");
+                "Erro ao gerar chave privada do túnel VPN (wg genkey). Verifique se as ferramentas VPN estão instaladas no servidor da API.");
         }
 
         var publicKeyPsi = new ProcessStartInfo
@@ -61,7 +61,7 @@ public static class WireGuardKeyGenerator
 
         if (publicKeyProcess.ExitCode != 0 || string.IsNullOrEmpty(publicKey))
         {
-            throw new InvalidOperationException("Erro ao gerar chave pública WireGuard (wg pubkey).");
+            throw new InvalidOperationException("Erro ao gerar chave pública do túnel VPN (wg pubkey).");
         }
 
         return (publicKey, privateKey);

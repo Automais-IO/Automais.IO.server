@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Automais.Api.Controllers;
 
-/// <summary>API de peers (<c>vpn_peers</c>). Rotas mantêm <c>wireguard</c> na URL por compatibilidade com clientes.</summary>
+/// <summary>API de peers (<c>vpn_peers</c>).</summary>
 [ApiController]
 [Route("api")]
 [Produces("application/json")]
@@ -23,14 +23,14 @@ public class VpnPeersController : ControllerBase
         _logger = logger;
     }
 
-    [HttpGet("routers/{routerId:guid}/wireguard/peers")]
+    [HttpGet("routers/{routerId:guid}/vpn/peers")]
     public async Task<ActionResult<IEnumerable<VpnPeerDto>>> GetPeers(Guid routerId, CancellationToken cancellationToken)
     {
         var peers = await _vpnPeerService.GetByRouterIdAsync(routerId, cancellationToken);
         return Ok(peers);
     }
 
-    [HttpGet("wireguard/peers/{id:guid}")]
+    [HttpGet("vpn/peers/{id:guid}")]
     public async Task<ActionResult<VpnPeerDto>> GetPeerById(Guid id, CancellationToken cancellationToken)
     {
         var peer = await _vpnPeerService.GetByIdAsync(id, cancellationToken);
@@ -41,7 +41,7 @@ public class VpnPeersController : ControllerBase
         return Ok(peer);
     }
 
-    [HttpPost("routers/{routerId:guid}/wireguard/peers")]
+    [HttpPost("routers/{routerId:guid}/vpn/peers")]
     public async Task<ActionResult<VpnPeerDto>> CreatePeer(Guid routerId, [FromBody] CreateVpnPeerDto dto, CancellationToken cancellationToken)
     {
         try
@@ -61,7 +61,7 @@ public class VpnPeersController : ControllerBase
         }
     }
 
-    [HttpPut("wireguard/peers/{id:guid}")]
+    [HttpPut("vpn/peers/{id:guid}")]
     public async Task<ActionResult<VpnPeerDto>> UpdatePeer(Guid id, [FromBody] CreateVpnPeerDto dto, CancellationToken cancellationToken)
     {
         try
@@ -76,14 +76,14 @@ public class VpnPeersController : ControllerBase
         }
     }
 
-    [HttpDelete("wireguard/peers/{id:guid}")]
+    [HttpDelete("vpn/peers/{id:guid}")]
     public async Task<IActionResult> DeletePeer(Guid id, CancellationToken cancellationToken)
     {
         await _vpnPeerService.DeletePeerAsync(id, cancellationToken);
         return NoContent();
     }
 
-    [HttpGet("wireguard/peers/{id:guid}/config")]
+    [HttpGet("vpn/peers/{id:guid}/config")]
     public async Task<ActionResult<VpnPeerConfigDto>> GetConfig(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -98,8 +98,8 @@ public class VpnPeersController : ControllerBase
         }
     }
 
-    /// <summary>Download da configuração WireGuard do router (arquivo .conf)</summary>
-    [HttpGet("routers/{routerId:guid}/wireguard/config/download")]
+    /// <summary>Download da configuração VPN do router (arquivo .conf)</summary>
+    [HttpGet("routers/{routerId:guid}/vpn/config/download")]
     public async Task<IActionResult> DownloadConfig(
         Guid routerId,
         CancellationToken cancellationToken)
@@ -185,7 +185,7 @@ public class VpnPeersController : ControllerBase
         }
     }
 
-    [HttpPost("wireguard/peers/{id:guid}/regenerate-keys")]
+    [HttpPost("vpn/peers/{id:guid}/regenerate-keys")]
     public async Task<ActionResult<VpnPeerDto>> RegenerateKeys(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -206,7 +206,7 @@ public class VpnPeersController : ControllerBase
     }
 
     /// <summary>Atualiza estatísticas do peer (serviço de monitoramento Python).</summary>
-    [HttpPatch("wireguard/peers/{id:guid}/stats")]
+    [HttpPatch("vpn/peers/{id:guid}/stats")]
     public async Task<IActionResult> UpdatePeerStats(Guid id, [FromBody] UpdatePeerStatsDto dto, CancellationToken cancellationToken)
     {
         try

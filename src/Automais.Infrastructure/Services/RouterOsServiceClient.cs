@@ -257,12 +257,12 @@ public class RouterOsServiceClient : IRouterOsServiceClient
         }
     }
 
-    public async Task<List<RouterOsWireGuardInterfaceDto>> ListWireGuardInterfacesAsync(
+    public async Task<List<RouterOsVpnTunnelInterfaceDto>> ListVpnTunnelInterfacesAsync(
         Guid routerId,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
-            "[Router API] Tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard",
+            "[Router API] Tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesVpnTunnel",
             routerId);
 
         try
@@ -270,19 +270,19 @@ public class RouterOsServiceClient : IRouterOsServiceClient
             // Buscar ServerEndpoint do router para construir URL dinâmica
             var serverEndpoint = await GetServerEndpointFromRouterAsync(routerId, cancellationToken);
             var baseUrl = GetBaseUrl(serverEndpoint);
-            var fullUrl = $"{baseUrl.TrimEnd('/')}/api/v1/routeros/{routerId}/wireguard-interfaces";
+            var fullUrl = $"{baseUrl.TrimEnd('/')}/api/v1/routeros/{routerId}/vpn-tunnel-interfaces";
 
             var response = await _httpClient.GetAsync(fullUrl, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<WireGuardInterfacesResponse>(cancellationToken: cancellationToken);
+                var result = await response.Content.ReadFromJsonAsync<VpnTunnelInterfacesResponse>(cancellationToken: cancellationToken);
                 if (result?.Success == true && result.Interfaces != null)
                 {
                     _logger.LogInformation(
-                        "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard, sucesso=Sim, quantidade={Count}",
+                        "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesVpnTunnel, sucesso=Sim, quantidade={Count}",
                         routerId, result.Interfaces.Count);
-                    return result.Interfaces.Select(i => new RouterOsWireGuardInterfaceDto
+                    return result.Interfaces.Select(i => new RouterOsVpnTunnelInterfaceDto
                     {
                         Name = i.Name ?? string.Empty,
                         PublicKey = i.PublicKey ?? string.Empty,
@@ -295,16 +295,16 @@ public class RouterOsServiceClient : IRouterOsServiceClient
             }
 
             _logger.LogWarning(
-                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard, sucesso=Não, statusHTTP={StatusCode}",
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesVpnTunnel, sucesso=Não, statusHTTP={StatusCode}",
                 routerId, response?.StatusCode);
-            return new List<RouterOsWireGuardInterfaceDto>();
+            return new List<RouterOsVpnTunnelInterfaceDto>();
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex,
-                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesWireGuard, sucesso=Não, erro={Error}",
+                "[Router API] Resultado da tentativa de acesso ao router via API: RouterId={RouterId}, operação=ListarInterfacesVpnTunnel, sucesso=Não, erro={Error}",
                 routerId, ex.Message);
-            return new List<RouterOsWireGuardInterfaceDto>();
+            return new List<RouterOsVpnTunnelInterfaceDto>();
         }
     }
 
@@ -342,13 +342,13 @@ public class RouterOsServiceClient : IRouterOsServiceClient
         public string? GatewayUsed { get; set; }
     }
 
-    private class WireGuardInterfacesResponse
+    private class VpnTunnelInterfacesResponse
     {
         public bool Success { get; set; }
-        public List<WireGuardInterfaceItem>? Interfaces { get; set; }
+        public List<VpnTunnelInterfaceItem>? Interfaces { get; set; }
     }
 
-    private class WireGuardInterfaceItem
+    private class VpnTunnelInterfaceItem
     {
         public string? Name { get; set; }
         public string? PublicKey { get; set; }

@@ -371,7 +371,7 @@ public class RouterStaticRoutesController : ControllerBase
                     if (success)
                     {
                         // Atualizar status para Applied, incluindo gateway usado pelo RouterOS
-                        // gatewayUsed pode ser um IP ou o nome da interface WireGuard detectada automaticamente
+                        // gatewayUsed pode ser um IP ou o nome da interface VPN detectada automaticamente
                         // Sempre passar o gateway, mesmo que seja string vazia (para garantir sincronização)
                         var gatewayToUpdate = gatewayUsed ?? string.Empty;
                         _logger.LogInformation(
@@ -536,15 +536,13 @@ public class RouterStaticRoutesController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Lista interfaces WireGuard do RouterOS para dedução automática
-    /// </summary>
-    [HttpGet("wireguard-interfaces")]
-    public async Task<ActionResult<List<RouterOsWireGuardInterfaceDto>>> GetWireGuardInterfaces(
+    /// <summary>Lista interfaces de túnel VPN no RouterOS (dedução automática).</summary>
+    [HttpGet("vpn-tunnel-interfaces")]
+    public async Task<ActionResult<List<RouterOsVpnTunnelInterfaceDto>>> GetVpnTunnelInterfaces(
         Guid routerId,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Listando interfaces WireGuard do router {RouterId}", routerId);
+        _logger.LogInformation("Listando interfaces VPN do router {RouterId}", routerId);
 
         try
         {
@@ -553,15 +551,15 @@ public class RouterStaticRoutesController : ControllerBase
                 return BadRequest(new { message = "Serviço RouterOS não configurado" });
             }
 
-            var interfaces = await _routerOsServiceClient.ListWireGuardInterfacesAsync(routerId, cancellationToken);
+            var interfaces = await _routerOsServiceClient.ListVpnTunnelInterfacesAsync(routerId, cancellationToken);
             return Ok(interfaces);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao listar interfaces WireGuard do router {RouterId}", routerId);
+            _logger.LogError(ex, "Erro ao listar interfaces VPN do router {RouterId}", routerId);
             return StatusCode(500, new 
             { 
-                message = "Erro interno do servidor ao listar interfaces WireGuard",
+                message = "Erro interno do servidor ao listar interfaces VPN",
                 detail = ex.Message
             });
         }

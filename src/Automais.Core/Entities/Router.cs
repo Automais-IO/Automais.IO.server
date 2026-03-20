@@ -27,7 +27,7 @@ public class Router
     public bool AutomaisApiUserCreated { get; set; } = false;
     public Guid? VpnNetworkId { get; set; }
 
-    /// <summary>Peer WireGuard principal na tabela <c>vpn_peers</c> (opcional).</summary>
+    /// <summary>Peer VPN principal na tabela <c>vpn_peers</c> (opcional).</summary>
     public Guid? VpnPeerId { get; set; }
 
     public RouterOsApiAuthStatus RouterOsApiAuthStatus { get; set; } = RouterOsApiAuthStatus.Unknown;

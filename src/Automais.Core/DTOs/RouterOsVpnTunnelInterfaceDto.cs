@@ -1,9 +1,9 @@
 namespace Automais.Core.DTOs;
 
 /// <summary>
-/// DTO para interface WireGuard do RouterOS
+/// Interface de túnel VPN no RouterOS (retorno da API RouterOS).
 /// </summary>
-public class RouterOsWireGuardInterfaceDto
+public class RouterOsVpnTunnelInterfaceDto
 {
     public string Name { get; set; } = string.Empty;
     public string PublicKey { get; set; } = string.Empty;

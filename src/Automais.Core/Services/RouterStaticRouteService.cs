@@ -235,7 +235,7 @@ public class RouterStaticRouteService : IRouterStaticRouteService
             throw new InvalidOperationException("Destination é obrigatório.");
         }
 
-        // Gateway é opcional - se vazio, RouterOS detectará interface WireGuard automaticamente
+        // Gateway é opcional - se vazio, RouterOS detectará a interface VPN automaticamente
         // Se fornecido, pode ser um IP ou nome de interface
 
         // Validar formato Destination (IP/CIDR)
@@ -245,7 +245,7 @@ public class RouterStaticRouteService : IRouterStaticRouteService
         }
 
         // Validar formato Gateway apenas se fornecido
-        // Gateway pode ser um IP ou nome de interface WireGuard
+        // Gateway pode ser um IP ou nome de interface VPN
         if (!string.IsNullOrWhiteSpace(dto.Gateway))
         {
             // Se parece ser um IP (contém apenas números e pontos), validar formato IP

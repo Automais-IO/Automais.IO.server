@@ -1,7 +1,7 @@
 namespace Automais.Core.Entities;
 
 /// <summary>
-/// Linha na tabela <c>vpn_peers</c> (protocolo WireGuard no servidor VPN).
+/// Linha na tabela <c>vpn_peers</c> (túnel VPN no servidor).
 /// Vínculo com router: <see cref="Router.VpnPeerId"/>; com host: <see cref="Host.VpnPeerId"/>.
 /// </summary>
 public class VpnPeer

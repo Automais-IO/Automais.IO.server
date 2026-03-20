@@ -24,9 +24,7 @@ public class HostDto
 
     /// <summary>FK para <c>vpn_peers</c>.</summary>
     public Guid? VpnPeerId { get; set; }
-    /// <summary>Compat.: mesmo valor que <see cref="VpnPeerId"/>.</summary>
-    public Guid? WireGuardPeerId { get; set; }
-    public bool WireGuardPeerKeysConfigured { get; set; }
+    public bool VpnPeerKeysConfigured { get; set; }
 }
 
 public class CreateHostDto

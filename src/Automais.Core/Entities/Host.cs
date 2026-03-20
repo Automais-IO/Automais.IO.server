@@ -14,7 +14,7 @@ public class Host
 
     public Guid? VpnNetworkId { get; set; }
 
-    /// <summary>Peer WireGuard na tabela unificada <c>vpn_peers</c> (peer sem router, só rede VPN).</summary>
+    /// <summary>Peer VPN na tabela <c>vpn_peers</c> (host sem router MikroTik).</summary>
     public Guid? VpnPeerId { get; set; }
 
     /// <summary>IP do host na rede VPN (sem máscara, ex.: "10.100.1.50").</summary>

@@ -1,8 +1,8 @@
 namespace Automais.Core.Entities;
 
 /// <summary>
-/// Representa uma rede destino para um Router: rede para a qual o tráfego VPN é encaminhado via este tunnel (iptables/WireGuard).
-/// Ao adicionar uma rede destino, o PeerIp do peer WireGuard é atualizado para que o sistema saiba para qual interface encaminhar o tráfego.
+/// Rede destino para um Router: tráfego VPN encaminhado via este túnel.
+/// Ao adicionar uma rede destino, o PeerIp do peer VPN é atualizado para o encaminhamento correto.
 /// </summary>
 public class RouterAllowedNetwork
 {

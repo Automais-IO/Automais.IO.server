@@ -1,7 +1,7 @@
 namespace Automais.Core.Entities;
 
 /// <summary>
-/// Define uma rede lógica utilizada para entrega de VPN (WireGuard sob o capô).
+/// Define uma rede lógica de VPN no servidor.
 /// </summary>
 public class VpnNetwork
 {
@@ -15,14 +15,14 @@ public class VpnNetwork
     public string? DnsServers { get; set; }
     
     /// <summary>
-    /// Chave PRIVADA do servidor WireGuard para esta VPN.
+    /// Chave PRIVADA do servidor VPN (túnel) para esta rede.
     /// FONTE DE VERDADE: Salva no banco para recuperação de desastres.
     /// Nunca deve ser exposta na API.
     /// </summary>
     public string? ServerPrivateKey { get; set; }
     
     /// <summary>
-    /// Chave PÚBLICA do servidor WireGuard para esta VPN.
+    /// Chave PÚBLICA do servidor VPN para esta rede.
     /// Derivada da ServerPrivateKey. Usada nos arquivos .conf dos clientes.
     /// </summary>
     public string? ServerPublicKey { get; set; }
@@ -35,7 +35,7 @@ public class VpnNetwork
     public string? ServerEndpoint { get; set; }
 
     /// <summary>
-    /// Porta UDP da interface WireGuard desta rede no servidor VPN.
+    /// Porta UDP do túnel desta rede no servidor VPN.
     /// Deve ser única entre todas as VpnNetworks com o mesmo ServerEndpoint (mesma máquina).
     /// </summary>
     public int ListenPort { get; set; } = 51820;

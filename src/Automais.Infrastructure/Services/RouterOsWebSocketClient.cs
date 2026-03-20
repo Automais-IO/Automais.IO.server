@@ -68,7 +68,7 @@ public class RouterOsWebSocketClient : IRouterOsWebSocketClient
                 {
                     Success = false,
                     Connected = false,
-                    Error = "IP do router não encontrado. Configure RouterOsApiUrl ou crie um peer WireGuard."
+                    Error = "IP do router não encontrado. Configure RouterOsApiUrl ou crie um peer VPN."
                 };
             }
 
@@ -202,7 +202,7 @@ public class RouterOsWebSocketClient : IRouterOsWebSocketClient
                 return host;
         }
 
-        // Se não tiver, tentar buscar do peer WireGuard
+        // Se não tiver, tentar buscar do peer VPN
         var peers = await _peerRepository.GetByRouterIdAsync(router.Id, cancellationToken);
         var activePeer = peers.FirstOrDefault();
         if (activePeer != null && !string.IsNullOrWhiteSpace(activePeer.PeerIp))

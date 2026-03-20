@@ -1,9 +1,7 @@
-using Automais.Core.Configuration;
 using Automais.Core.DTOs;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Net;
 using System.Text;
@@ -12,30 +10,30 @@ using System.Text.RegularExpressions;
 namespace Automais.Core.Services;
 
 /// <summary>
-/// Gerencia linhas em <c>vpn_peers</c> (protocolo WireGuard no servidor VPN).
-/// O serviço Python sincroniza peers às interfaces periodicamente.
+/// Gerencia linhas em <c>vpn_peers</c>. O serviço Python sincroniza peers ao servidor VPN periodicamente.
 /// </summary>
+/// <remarks>
+/// Para agentes de IA: o túnel operacional servidor/cliente e os .conf gerados seguem o stack <strong>WireGuard</strong>.
+/// A nomenclatura "VPN" é deliberada para o produto; comandos no host (wg/wg-quick) e formato de chaves são os do WireGuard.
+/// </remarks>
 public class VpnPeerService : IVpnPeerService
 {
     private readonly IVpnPeerRepository _peerRepository;
     private readonly IRouterRepository _routerRepository;
     private readonly IVpnNetworkRepository _vpnNetworkRepository;
     private readonly IVpnServiceClient _vpnServiceClient;
-    private readonly WireGuardSettings _wireGuardSettings;
     private readonly ILogger<VpnPeerService>? _logger;
 
     public VpnPeerService(
         IVpnPeerRepository peerRepository,
         IRouterRepository routerRepository,
         IVpnNetworkRepository vpnNetworkRepository,
-        IOptions<WireGuardSettings> wireGuardSettings,
         IVpnServiceClient vpnServiceClient,
         ILogger<VpnPeerService>? logger = null)
     {
         _peerRepository = peerRepository;
         _routerRepository = routerRepository;
         _vpnNetworkRepository = vpnNetworkRepository;
-        _wireGuardSettings = wireGuardSettings.Value;
         _vpnServiceClient = vpnServiceClient;
         _logger = logger;
     }
@@ -75,8 +73,8 @@ public class VpnPeerService : IVpnPeerService
                 "Este router já possui um peer VPN. Remova o peer atual antes de criar outro ou use regenerar chaves.");
         }
 
-        // Gerar chaves WireGuard localmente
-        var (publicKey, privateKey) = await GenerateWireGuardKeysAsync(cancellationToken);
+        // Gerar chaves do túnel VPN localmente
+        var (publicKey, privateKey) = await GenerateVpnTunnelKeysAsync(cancellationToken);
 
         // Alocar IP (manual ou automático)
         string routerIp;
@@ -286,7 +284,7 @@ public class VpnPeerService : IVpnPeerService
             throw new InvalidOperationException($"Rede VPN {peer.VpnNetworkId} não encontrada para o peer.");
         }
 
-        var (publicKey, privateKey) = await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+        var (publicKey, privateKey) = await VpnTunnelKeyGenerator.GenerateKeyPairAsync(cancellationToken);
         peer.PublicKey = publicKey;
         peer.PrivateKey = privateKey;
         peer.VpnNetwork = vpnNetwork;
@@ -333,19 +331,17 @@ public class VpnPeerService : IVpnPeerService
         };
     }
 
-    /// <summary>
-    /// Gera chaves WireGuard usando wg genkey e wg pubkey
-    /// </summary>
-    private async Task<(string publicKey, string privateKey)> GenerateWireGuardKeysAsync(CancellationToken cancellationToken)
+    /// <summary>Gera chaves do túnel VPN (ferramenta <c>wg</c> no host).</summary>
+    private async Task<(string publicKey, string privateKey)> GenerateVpnTunnelKeysAsync(CancellationToken cancellationToken)
     {
         try
         {
-            return await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+            return await VpnTunnelKeyGenerator.GenerateKeyPairAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Erro ao gerar chaves WireGuard");
-            throw new InvalidOperationException($"Erro ao gerar chaves WireGuard: {ex.Message}", ex);
+            _logger?.LogError(ex, "Erro ao gerar chaves do túnel VPN");
+            throw new InvalidOperationException($"Erro ao gerar chaves do túnel VPN: {ex.Message}", ex);
         }
     }
 
@@ -534,7 +530,7 @@ public class VpnPeerService : IVpnPeerService
             "[Peer]",
         };
         if (string.IsNullOrEmpty(serverPublicKey))
-            lines.Add("# PublicKey do servidor — preencha após wg show no servidor VPN");
+            lines.Add("# PublicKey do servidor — preencha após consultar o servidor VPN");
         lines.Add($"PublicKey = {serverPublicKey}");
         lines.Add($"Endpoint = {serverEndpoint}:{listenPort}");
         lines.Add($"AllowedIPs = {vpnNetwork.Cidr}");
@@ -543,7 +539,7 @@ public class VpnPeerService : IVpnPeerService
     }
 
     /// <summary>
-    /// Gera o conteúdo do arquivo de configuração WireGuard (.conf) para o router
+    /// Gera o conteúdo do arquivo de configuração do cliente VPN (.conf) para o router
     /// </summary>
     private static string GenerateRouterConfig(Router router, VpnPeer peer, VpnNetwork vpnNetwork)
     {
@@ -584,7 +580,7 @@ public class VpnPeerService : IVpnPeerService
 
         if (string.IsNullOrEmpty(serverPublicKey))
         {
-            configLines.Add("# PublicKey do servidor — preencha com a chave do servidor (wg show no servidor VPN)");
+            configLines.Add("# PublicKey do servidor — preencha com a chave obtida no servidor VPN");
         }
         configLines.Add($"PublicKey = {serverPublicKey}");
         configLines.Add($"Endpoint = {serverEndpoint}:{listenPort}");

@@ -8,7 +8,7 @@ namespace Automais.Core.Services;
 
 /// <summary>
 /// Serviço para gerenciamento de redes destino dos routers.
-/// Ao criar/atualizar/deletar uma rede destino, o PeerIp do(s) peer(s) WireGuard do router é recalculado.
+/// Ao criar/atualizar/deletar uma rede destino, o PeerIp do(s) peer(s) VPN do router é recalculado.
 /// </summary>
 public class RouterAllowedNetworkService : IRouterAllowedNetworkService
 {
@@ -111,7 +111,7 @@ public class RouterAllowedNetworkService : IRouterAllowedNetworkService
     }
 
     /// <summary>
-    /// Recalcula e atualiza o PeerIp de todos os peers WireGuard do router com a lista atual de redes destino.
+    /// Recalcula e atualiza o PeerIp de todos os peers VPN do router com a lista atual de redes destino.
     /// </summary>
     private async Task RefreshPeerIpForRouterAsync(Guid routerId, CancellationToken cancellationToken)
     {

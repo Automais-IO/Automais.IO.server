@@ -12,7 +12,7 @@ public class VpnNetworkService : IVpnNetworkService
     private readonly IVpnNetworkRepository _vpnNetworkRepository;
     private readonly IDeviceRepository _deviceRepository;
     private readonly ITenantUserService _tenantUserService;
-    private readonly WireGuardSettings _wireGuardSettings;
+    private readonly VpnDefaultsSettings _vpnDefaults;
     private readonly IVpnServiceClient? _vpnServiceClient;
     private readonly IVpnPeerService? _vpnPeerService;
 
@@ -21,7 +21,7 @@ public class VpnNetworkService : IVpnNetworkService
         IVpnNetworkRepository vpnNetworkRepository,
         IDeviceRepository deviceRepository,
         ITenantUserService tenantUserService,
-        IOptions<WireGuardSettings> wireGuardSettings,
+        IOptions<VpnDefaultsSettings> vpnDefaults,
         IVpnServiceClient? vpnServiceClient = null,
         IVpnPeerService? vpnPeerService = null)
     {
@@ -29,7 +29,7 @@ public class VpnNetworkService : IVpnNetworkService
         _vpnNetworkRepository = vpnNetworkRepository;
         _deviceRepository = deviceRepository;
         _tenantUserService = tenantUserService;
-        _wireGuardSettings = wireGuardSettings.Value;
+        _vpnDefaults = vpnDefaults.Value;
         _vpnServiceClient = vpnServiceClient;
         _vpnPeerService = vpnPeerService;
     }
@@ -68,7 +68,7 @@ public class VpnNetworkService : IVpnNetworkService
 
         var serverEndpoint = !string.IsNullOrWhiteSpace(dto.ServerEndpoint)
             ? dto.ServerEndpoint.Trim()
-            : _wireGuardSettings.DefaultServerEndpoint;
+            : _vpnDefaults.DefaultServerEndpoint;
 
         int listenPort;
         if (dto.ListenPort.HasValue)
@@ -86,7 +86,7 @@ public class VpnNetworkService : IVpnNetworkService
         }
 
         var (serverPublicKey, serverPrivateKey) =
-            await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+            await VpnTunnelKeyGenerator.GenerateKeyPairAsync(cancellationToken);
 
         var network = new VpnNetwork
         {
@@ -108,7 +108,7 @@ public class VpnNetworkService : IVpnNetworkService
 
         var created = await _vpnNetworkRepository.CreateAsync(network, cancellationToken);
         
-        // Garantir que a interface WireGuard seja criada e iniciada (via serviço Python)
+        // Garantir que a interface VPN no servidor seja criada e iniciada (via serviço Python)
         // O serviço Python fará isso automaticamente via auto-descoberta
         if (_vpnServiceClient != null)
         {
@@ -160,7 +160,7 @@ public class VpnNetworkService : IVpnNetworkService
         {
             var newEp = !string.IsNullOrWhiteSpace(dto.ServerEndpoint.Trim())
                 ? dto.ServerEndpoint.Trim()
-                : _wireGuardSettings.DefaultServerEndpoint;
+                : _vpnDefaults.DefaultServerEndpoint;
             if (!string.Equals(network.ServerEndpoint?.Trim(), newEp, StringComparison.Ordinal))
             {
                 serverEndpointChanged = true;
@@ -170,7 +170,7 @@ public class VpnNetworkService : IVpnNetworkService
         }
         else if (string.IsNullOrWhiteSpace(network.ServerEndpoint))
         {
-            network.ServerEndpoint = _wireGuardSettings.DefaultServerEndpoint;
+            network.ServerEndpoint = _vpnDefaults.DefaultServerEndpoint;
         }
 
         if (dto.ServerPublicKey != null)
@@ -217,7 +217,7 @@ public class VpnNetworkService : IVpnNetworkService
             return;
         }
 
-        // Remover interface WireGuard antes de deletar do banco (via serviço Python)
+        // Remover interface VPN no servidor antes de deletar do banco (via serviço Python)
         if (_vpnServiceClient != null)
         {
             try
@@ -244,7 +244,7 @@ public class VpnNetworkService : IVpnNetworkService
         }
 
         var (serverPublicKey, serverPrivateKey) =
-            await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
+            await VpnTunnelKeyGenerator.GenerateKeyPairAsync(cancellationToken);
         network.ServerPublicKey = serverPublicKey;
         network.ServerPrivateKey = serverPrivateKey;
         network.UpdatedAt = DateTime.UtcNow;

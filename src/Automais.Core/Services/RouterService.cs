@@ -119,7 +119,7 @@ public class RouterService : IRouterService
 
         var created = await _routerRepository.CreateAsync(router, cancellationToken);
         
-        // Se tem VpnNetworkId, provisionar WireGuard automaticamente.
+        // Se tem VpnNetworkId, provisionar peer VPN automaticamente.
         // PeerIp = apenas IP do router (ou vazio para alocação automática). Redes destino são adicionadas depois via CRUD.
         if (created.VpnNetworkId.HasValue && _vpnPeerService != null)
         {
@@ -345,8 +345,7 @@ public class RouterService : IRouterService
         // Buscar ServerEndpoint da VpnNetwork se houver repositório disponível
         string? vpnNetworkServerEndpoint = null;
         Guid? vpnPeerId = router.VpnPeerId;
-        Guid? wireGuardPeerId = vpnPeerId;
-        var wireGuardPeerKeysConfigured = false;
+        var vpnPeerKeysConfigured = false;
         if (router.VpnNetworkId.HasValue && _vpnNetworkRepository != null)
         {
             try
@@ -361,8 +360,8 @@ public class RouterService : IRouterService
         }
 
         string? vpnTunnelIp = null;
-        long? wireGuardBytesReceived = null;
-        long? wireGuardBytesSent = null;
+        long? vpnBytesReceived = null;
+        long? vpnBytesSent = null;
         if (_vpnPeerRepository != null)
         {
             try
@@ -377,12 +376,11 @@ public class RouterService : IRouterService
                 if (peer != null)
                 {
                     vpnPeerId = peer.Id;
-                    wireGuardPeerId = peer.Id;
-                    wireGuardPeerKeysConfigured = !string.IsNullOrWhiteSpace(peer.PublicKey)
+                    vpnPeerKeysConfigured = !string.IsNullOrWhiteSpace(peer.PublicKey)
                                                   && !string.IsNullOrWhiteSpace(peer.PrivateKey);
                     vpnTunnelIp = ExtractVpnTunnelIp(peer.PeerIp);
-                    wireGuardBytesReceived = peer.BytesReceived;
-                    wireGuardBytesSent = peer.BytesSent;
+                    vpnBytesReceived = peer.BytesReceived;
+                    vpnBytesSent = peer.BytesSent;
                 }
             }
             catch
@@ -417,11 +415,10 @@ public class RouterService : IRouterService
             UpdatedAt = router.UpdatedAt,
             AllowedNetworks = allowedNetworks,
             VpnPeerId = vpnPeerId,
-            WireGuardPeerId = wireGuardPeerId,
-            WireGuardPeerKeysConfigured = wireGuardPeerKeysConfigured,
+            VpnPeerKeysConfigured = vpnPeerKeysConfigured,
             VpnTunnelIp = vpnTunnelIp,
-            WireGuardBytesReceived = wireGuardBytesReceived,
-            WireGuardBytesSent = wireGuardBytesSent
+            VpnBytesReceived = vpnBytesReceived,
+            VpnBytesSent = vpnBytesSent
         };
     }
 

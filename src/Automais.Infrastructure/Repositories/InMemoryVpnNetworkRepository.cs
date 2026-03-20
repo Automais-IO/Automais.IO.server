@@ -6,24 +6,18 @@ namespace Automais.Infrastructure.Repositories;
 public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
 {
     private readonly List<VpnNetwork> _networks = new();
-    private readonly List<VpnNetworkMembership> _memberships = new();
     private readonly object _lock = new();
 
     public Task<IEnumerable<VpnNetwork>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         lock (_lock)
-        {
             return Task.FromResult<IEnumerable<VpnNetwork>>(_networks.OrderBy(n => n.Name).ToList());
-        }
     }
 
     public Task<VpnNetwork?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         lock (_lock)
-        {
-            var network = _networks.FirstOrDefault(n => n.Id == id);
-            return Task.FromResult(network);
-        }
+            return Task.FromResult(_networks.FirstOrDefault(n => n.Id == id));
     }
 
     public Task<IEnumerable<VpnNetwork>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
@@ -31,10 +25,7 @@ public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
         lock (_lock)
         {
             var idSet = ids.ToHashSet();
-            var result = _networks
-                .Where(n => idSet.Contains(n.Id))
-                .ToList();
-
+            var result = _networks.Where(n => idSet.Contains(n.Id)).ToList();
             return Task.FromResult<IEnumerable<VpnNetwork>>(result);
         }
     }
@@ -43,11 +34,7 @@ public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
     {
         lock (_lock)
         {
-            var result = _networks
-                .Where(n => n.TenantId == tenantId)
-                .OrderBy(n => n.Name)
-                .ToList();
-
+            var result = _networks.Where(n => n.TenantId == tenantId).OrderBy(n => n.Name).ToList();
             return Task.FromResult<IEnumerable<VpnNetwork>>(result);
         }
     }
@@ -67,10 +54,7 @@ public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
         {
             var index = _networks.FindIndex(n => n.Id == network.Id);
             if (index >= 0)
-            {
                 _networks[index] = network;
-            }
-
             return Task.FromResult(network);
         }
     }
@@ -81,11 +65,7 @@ public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
         {
             var network = _networks.FirstOrDefault(n => n.Id == id);
             if (network != null)
-            {
                 _networks.Remove(network);
-            }
-
-            _memberships.RemoveAll(m => m.VpnNetworkId == id);
         }
 
         return Task.CompletedTask;
@@ -98,74 +78,21 @@ public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
             var exists = _networks.Any(n =>
                 n.TenantId == tenantId &&
                 n.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
-
             return Task.FromResult(exists);
         }
     }
 
-    public Task<IEnumerable<VpnNetworkMembership>> GetMembershipsByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<VpnNetwork?> GetDefaultOrFirstForTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
-            var result = _memberships
-                .Where(m => m.TenantUserId == userId)
-                .ToList();
-
-            return Task.FromResult<IEnumerable<VpnNetworkMembership>>(result);
+            var x = _networks
+                .Where(n => n.TenantId == tenantId)
+                .OrderByDescending(n => n.IsDefault)
+                .ThenBy(n => n.Name)
+                .FirstOrDefault();
+            return Task.FromResult(x);
         }
-    }
-
-    public Task<IEnumerable<VpnNetworkMembership>> GetMembershipsByNetworkIdAsync(Guid networkId, CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            var result = _memberships
-                .Where(m => m.VpnNetworkId == networkId)
-                .ToList();
-
-            return Task.FromResult<IEnumerable<VpnNetworkMembership>>(result);
-        }
-    }
-
-    public Task<int> CountMembershipsByNetworkIdAsync(Guid networkId, CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            var count = _memberships.Count(m => m.VpnNetworkId == networkId);
-            return Task.FromResult(count);
-        }
-    }
-
-    public Task ReplaceUserMembershipsAsync(Guid tenantId, Guid userId, IEnumerable<Guid> networkIds, CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            _memberships.RemoveAll(m => m.TenantUserId == userId);
-
-            foreach (var networkId in networkIds.Distinct())
-            {
-                _memberships.Add(new VpnNetworkMembership
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenantId,
-                    VpnNetworkId = networkId,
-                    TenantUserId = userId,
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task RemoveMembershipsByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        lock (_lock)
-        {
-            _memberships.RemoveAll(m => m.TenantUserId == userId);
-        }
-
-        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<int>> GetListenPortsForServerEndpointAsync(string? serverEndpoint, Guid? excludeNetworkId, CancellationToken cancellationToken = default)
@@ -183,5 +110,3 @@ public class InMemoryVpnNetworkRepository : IVpnNetworkRepository
         }
     }
 }
-
-

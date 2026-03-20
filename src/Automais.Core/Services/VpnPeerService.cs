@@ -12,26 +12,25 @@ using System.Text.RegularExpressions;
 namespace Automais.Core.Services;
 
 /// <summary>
-/// Serviço para gerenciamento de WireGuard dos Routers
-/// Cria peers diretamente no banco de dados. O serviço Python (vpnserver.io) sincroniza
-/// automaticamente a cada minuto e adiciona os peers às interfaces WireGuard.
+/// Gerencia linhas em <c>vpn_peers</c> (protocolo WireGuard no servidor VPN).
+/// O serviço Python sincroniza peers às interfaces periodicamente.
 /// </summary>
-public class RouterWireGuardService : IRouterWireGuardService
+public class VpnPeerService : IVpnPeerService
 {
-    private readonly IRouterWireGuardPeerRepository _peerRepository;
+    private readonly IVpnPeerRepository _peerRepository;
     private readonly IRouterRepository _routerRepository;
     private readonly IVpnNetworkRepository _vpnNetworkRepository;
     private readonly IVpnServiceClient _vpnServiceClient;
     private readonly WireGuardSettings _wireGuardSettings;
-    private readonly ILogger<RouterWireGuardService>? _logger;
+    private readonly ILogger<VpnPeerService>? _logger;
 
-    public RouterWireGuardService(
-        IRouterWireGuardPeerRepository peerRepository,
+    public VpnPeerService(
+        IVpnPeerRepository peerRepository,
         IRouterRepository routerRepository,
         IVpnNetworkRepository vpnNetworkRepository,
         IOptions<WireGuardSettings> wireGuardSettings,
         IVpnServiceClient vpnServiceClient,
-        ILogger<RouterWireGuardService>? logger = null)
+        ILogger<VpnPeerService>? logger = null)
     {
         _peerRepository = peerRepository;
         _routerRepository = routerRepository;
@@ -41,19 +40,22 @@ public class RouterWireGuardService : IRouterWireGuardService
         _logger = logger;
     }
 
-    public async Task<IEnumerable<RouterWireGuardPeerDto>> GetByRouterIdAsync(Guid routerId, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<VpnPeerDto>> GetByRouterIdAsync(Guid routerId, CancellationToken cancellationToken = default)
     {
         var peers = await _peerRepository.GetByRouterIdAsync(routerId, cancellationToken);
-        return peers.Select(MapToDto);
+        var list = new List<VpnPeerDto>();
+        foreach (var p in peers)
+            list.Add(await MapToDtoAsync(p, routerId, cancellationToken));
+        return list;
     }
 
-    public async Task<RouterWireGuardPeerDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<VpnPeerDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var peer = await _peerRepository.GetByIdAsync(id, cancellationToken);
-        return peer == null ? null : MapToDto(peer);
+        return peer == null ? null : await MapToDtoAsync(peer, null, cancellationToken);
     }
 
-    public async Task<RouterWireGuardPeerDto> CreatePeerAsync(Guid routerId, CreateRouterWireGuardPeerDto dto, CancellationToken cancellationToken = default)
+    public async Task<VpnPeerDto> CreatePeerAsync(Guid routerId, CreateVpnPeerDto dto, CancellationToken cancellationToken = default)
     {
         var router = await _routerRepository.GetByIdAsync(routerId, cancellationToken);
         if (router == null)
@@ -67,13 +69,11 @@ public class RouterWireGuardService : IRouterWireGuardService
             throw new KeyNotFoundException($"Rede VPN com ID {dto.VpnNetworkId} não encontrada.");
         }
 
-        // Verificar se já existe peer para este router e network
-        var existing = await _peerRepository.GetByRouterIdAndNetworkIdAsync(routerId, dto.VpnNetworkId, cancellationToken);
-        if (existing != null)
+        if (router.VpnPeerId.HasValue)
         {
-            throw new InvalidOperationException($"Já existe um peer WireGuard para este router e rede VPN.");
+            throw new InvalidOperationException(
+                "Este router já possui um peer VPN. Remova o peer atual antes de criar outro ou use regenerar chaves.");
         }
-
 
         // Gerar chaves WireGuard localmente
         var (publicKey, privateKey) = await GenerateWireGuardKeysAsync(cancellationToken);
@@ -136,10 +136,9 @@ public class RouterWireGuardService : IRouterWireGuardService
         peerIpParts.AddRange(allowedNetworks);
         var peerIpValue = NormalizePeerIp(string.Join(",", peerIpParts));
 
-        var peer = new RouterWireGuardPeer
+        var peer = new VpnPeer
         {
             Id = Guid.NewGuid(),
-            RouterId = routerId,
             VpnNetworkId = dto.VpnNetworkId,
             PublicKey = publicKey,
             PrivateKey = privateKey,
@@ -150,20 +149,21 @@ public class RouterWireGuardService : IRouterWireGuardService
             UpdatedAt = DateTime.UtcNow
         };
 
-        // Gerar e salvar configuração no banco
-        peer.ConfigContent = GenerateRouterConfig(router, peer, vpnNetwork);
-
         var created = await _peerRepository.CreateAsync(peer, cancellationToken);
         created.VpnNetwork = vpnNetwork;
-        return MapToDto(created);
+
+        router.VpnPeerId = created.Id;
+        await _routerRepository.UpdateAsync(router, cancellationToken);
+
+        return await MapToDtoAsync(created, routerId, cancellationToken);
     }
 
-    public async Task<RouterWireGuardPeerDto> UpdatePeerAsync(Guid id, CreateRouterWireGuardPeerDto dto, CancellationToken cancellationToken = default)
+    public async Task<VpnPeerDto> UpdatePeerAsync(Guid id, CreateVpnPeerDto dto, CancellationToken cancellationToken = default)
     {
         var peer = await _peerRepository.GetByIdAsync(id, cancellationToken);
         if (peer == null)
         {
-            throw new KeyNotFoundException($"Peer WireGuard com ID {id} não encontrado.");
+            throw new KeyNotFoundException($"Peer VPN com ID {id} não encontrado.");
         }
 
         var normalizedPeerIp = NormalizePeerIp(dto.PeerIp);
@@ -174,7 +174,7 @@ public class RouterWireGuardService : IRouterWireGuardService
 
         var updated = await _peerRepository.UpdateAsync(peer, cancellationToken);
         updated.VpnNetwork = await _vpnNetworkRepository.GetByIdAsync(peer.VpnNetworkId, cancellationToken);
-        return MapToDto(updated);
+        return await MapToDtoAsync(updated, null, cancellationToken);
     }
 
     public async Task UpdatePeerStatsAsync(Guid id, UpdatePeerStatsDto dto, CancellationToken cancellationToken = default)
@@ -182,7 +182,7 @@ public class RouterWireGuardService : IRouterWireGuardService
         var peer = await _peerRepository.GetByIdAsync(id, cancellationToken);
         if (peer == null)
         {
-            throw new KeyNotFoundException($"Peer WireGuard com ID {id} não encontrado.");
+            throw new KeyNotFoundException($"Peer VPN com ID {id} não encontrado.");
         }
 
         // Atualizar apenas estatísticas (não configuração)
@@ -218,21 +218,15 @@ public class RouterWireGuardService : IRouterWireGuardService
 
     public async Task DeletePeerAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var peer = await _peerRepository.GetByIdAsync(id, cancellationToken);
-        if (peer == null)
-        {
-            return;
-        }
-
         await _peerRepository.DeleteAsync(id, cancellationToken);
     }
 
-    public async Task<RouterWireGuardConfigDto> GetConfigAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<VpnPeerConfigDto> GetConfigAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var peer = await _peerRepository.GetByIdAsync(id, cancellationToken);
         if (peer == null)
         {
-            throw new KeyNotFoundException($"Peer WireGuard com ID {id} não encontrado.");
+            throw new KeyNotFoundException($"Peer VPN com ID {id} não encontrado.");
         }
 
         var vpnNetwork = await _vpnNetworkRepository.GetByIdAsync(peer.VpnNetworkId, cancellationToken);
@@ -241,10 +235,8 @@ public class RouterWireGuardService : IRouterWireGuardService
             throw new KeyNotFoundException($"Rede VPN com ID {peer.VpnNetworkId} não encontrada.");
         }
 
-        var hadServerPublicKey = !string.IsNullOrWhiteSpace(vpnNetwork.ServerPublicKey);
-
         // Se ServerPublicKey está vazio, tentar obter do VPN server e salvar na VpnNetwork
-        if (!hadServerPublicKey)
+        if (string.IsNullOrWhiteSpace(vpnNetwork.ServerPublicKey))
         {
             var serverKey = await _vpnServiceClient.GetServerPublicKeyAsync(peer.VpnNetworkId, cancellationToken);
             if (!string.IsNullOrWhiteSpace(serverKey))
@@ -256,58 +248,36 @@ public class RouterWireGuardService : IRouterWireGuardService
             }
         }
 
-        // Só usar cache se já tínhamos a chave antes (cache antigo pode ter PublicKey vazio)
-        if (!string.IsNullOrWhiteSpace(peer.ConfigContent) && hadServerPublicKey)
-        {
-            var router = await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
-            var fileName = router != null 
-                ? SanitizeFileName(router.Name) 
-                : $"router_{peer.RouterId}.conf";
-            
-            if (!fileName.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName = $"{fileName}.conf";
-            }
+        var routerForPeer = await _routerRepository.GetByVpnPeerIdAsync(peer.Id, cancellationToken);
 
-            return new RouterWireGuardConfigDto
+        if (routerForPeer == null)
+        {
+            var hostConfig = GenerateHostVpnClientConfig(peer, vpnNetwork);
+            return new VpnPeerConfigDto
             {
-                ConfigContent = peer.ConfigContent,
-                FileName = fileName
+                ConfigContent = hostConfig,
+                FileName = $"host_{peer.Id}.conf"
             };
         }
 
-        // Gerar config (peer antigo sem cache, ou acabamos de obter ServerPublicKey)
-        var routerForConfig = await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
-        if (routerForConfig == null)
-        {
-            throw new KeyNotFoundException($"Router com ID {peer.RouterId} não encontrado.");
-        }
-
-        var configContent = GenerateRouterConfig(routerForConfig, peer, vpnNetwork);
-        
-        peer.ConfigContent = configContent;
-        peer.UpdatedAt = DateTime.UtcNow;
-        await _peerRepository.UpdateAsync(peer, cancellationToken);
-        
-        var fileNameForConfig = SanitizeFileName(routerForConfig.Name);
+        var configContent = GenerateRouterConfig(routerForPeer, peer, vpnNetwork);
+        var fileNameForConfig = SanitizeFileName(routerForPeer.Name);
         if (!fileNameForConfig.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
-        {
             fileNameForConfig = $"{fileNameForConfig}.conf";
-        }
 
-        return new RouterWireGuardConfigDto
+        return new VpnPeerConfigDto
         {
             ConfigContent = configContent,
             FileName = fileNameForConfig
         };
     }
 
-    public async Task<RouterWireGuardPeerDto> RegenerateKeysAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<VpnPeerDto> RegenerateKeysAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var peer = await _peerRepository.GetByIdAsync(id, cancellationToken);
         if (peer == null)
         {
-            throw new KeyNotFoundException($"Peer WireGuard com ID {id} não encontrado.");
+            throw new KeyNotFoundException($"Peer VPN com ID {id} não encontrado.");
         }
 
         var vpnNetwork = peer.VpnNetwork ?? await _vpnNetworkRepository.GetByIdAsync(peer.VpnNetworkId, cancellationToken);
@@ -316,55 +286,36 @@ public class RouterWireGuardService : IRouterWireGuardService
             throw new InvalidOperationException($"Rede VPN {peer.VpnNetworkId} não encontrada para o peer.");
         }
 
-        var router = peer.Router ?? await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
-        if (router == null)
-        {
-            throw new InvalidOperationException($"Router {peer.RouterId} não encontrado para o peer.");
-        }
-
         var (publicKey, privateKey) = await WireGuardKeyGenerator.GenerateKeyPairAsync(cancellationToken);
         peer.PublicKey = publicKey;
         peer.PrivateKey = privateKey;
         peer.VpnNetwork = vpnNetwork;
-        peer.ConfigContent = GenerateRouterConfig(router, peer, vpnNetwork);
+
         peer.UpdatedAt = DateTime.UtcNow;
 
         await _peerRepository.UpdateAsync(peer, cancellationToken);
 
         var reloaded = await _peerRepository.GetByIdAsync(id, cancellationToken);
-        return MapToDto(reloaded!);
+        return await MapToDtoAsync(reloaded!, null, cancellationToken);
     }
 
-    public async Task RefreshPeerConfigsForNetworkAsync(Guid vpnNetworkId, CancellationToken cancellationToken = default)
+    public Task RefreshPeerConfigsForNetworkAsync(Guid vpnNetworkId, CancellationToken cancellationToken = default)
     {
-        var vpnNetwork = await _vpnNetworkRepository.GetByIdAsync(vpnNetworkId, cancellationToken);
-        if (vpnNetwork == null)
-        {
-            return;
-        }
-
-        var peers = await _peerRepository.GetByVpnNetworkIdAsync(vpnNetworkId, cancellationToken);
-        foreach (var peer in peers)
-        {
-            var router = await _routerRepository.GetByIdAsync(peer.RouterId, cancellationToken);
-            if (router == null)
-            {
-                continue;
-            }
-
-            peer.ConfigContent = GenerateRouterConfig(router, peer, vpnNetwork);
-            peer.UpdatedAt = DateTime.UtcNow;
-            await _peerRepository.UpdateAsync(peer, cancellationToken);
-        }
+        // .conf não é mais persistido; GetConfigAsync monta o conteúdo na hora do download.
+        return Task.CompletedTask;
     }
 
-    private static RouterWireGuardPeerDto MapToDto(RouterWireGuardPeer peer)
+    private async Task<VpnPeerDto> MapToDtoAsync(
+        VpnPeer peer,
+        Guid? linkedRouterId,
+        CancellationToken cancellationToken = default)
     {
         var listenPort = peer.VpnNetwork?.ListenPort > 0 ? peer.VpnNetwork.ListenPort : 51820;
-        return new RouterWireGuardPeerDto
+        var routerId = linkedRouterId ?? (await _routerRepository.GetByVpnPeerIdAsync(peer.Id, cancellationToken))?.Id;
+        return new VpnPeerDto
         {
             Id = peer.Id,
-            RouterId = peer.RouterId,
+            RouterId = routerId,
             VpnNetworkId = peer.VpnNetworkId,
             PublicKey = peer.PublicKey,
             PeerIp = peer.PeerIp,
@@ -561,10 +512,40 @@ public class RouterWireGuardService : IRouterWireGuardService
         }
     }
 
+    /// <summary>Config .conf para host Linux (peer referenciado só por <see cref="Host.VpnPeerId"/>).</summary>
+    private static string GenerateHostVpnClientConfig(VpnPeer peer, VpnNetwork vpnNetwork)
+    {
+        var addrPart = peer.PeerIp.Split(',')[0].Trim();
+        var addressLine = addrPart.Contains('/') ? addrPart : $"{addrPart}/32";
+
+        var serverEndpoint = vpnNetwork.ServerEndpoint ?? "automais.io";
+        var serverPublicKey = (vpnNetwork.ServerPublicKey ?? "").Trim();
+        var listenPort = vpnNetwork.ListenPort > 0 ? vpnNetwork.ListenPort : 51820;
+
+        var lines = new List<string>
+        {
+            "# Automais.IO — peer de host (Linux)",
+            $"# Gerado em: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC",
+            "",
+            "[Interface]",
+            $"PrivateKey = {peer.PrivateKey}",
+            $"Address = {addressLine}",
+            "",
+            "[Peer]",
+        };
+        if (string.IsNullOrEmpty(serverPublicKey))
+            lines.Add("# PublicKey do servidor — preencha após wg show no servidor VPN");
+        lines.Add($"PublicKey = {serverPublicKey}");
+        lines.Add($"Endpoint = {serverEndpoint}:{listenPort}");
+        lines.Add($"AllowedIPs = {vpnNetwork.Cidr}");
+        lines.Add("PersistentKeepalive = 25");
+        return string.Join("\n", lines);
+    }
+
     /// <summary>
     /// Gera o conteúdo do arquivo de configuração WireGuard (.conf) para o router
     /// </summary>
-    private static string GenerateRouterConfig(Router router, RouterWireGuardPeer peer, VpnNetwork vpnNetwork)
+    private static string GenerateRouterConfig(Router router, VpnPeer peer, VpnNetwork vpnNetwork)
     {
         // Extrair IP do router (primeiro elemento do PeerIp)
         var routerIpWithPrefix = peer.PeerIp.Split(',')[0].Trim();
@@ -685,4 +666,3 @@ public class RouterWireGuardService : IRouterWireGuardService
         return sanitized;
     }
 }
-

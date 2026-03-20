@@ -185,7 +185,7 @@ public class VpnServiceClient : IVpnServiceClient
         }
     }
 
-    public async Task<RouterWireGuardConfigDto> GetConfigAsync(
+    public async Task<VpnPeerConfigDto> GetConfigAsync(
         Guid routerId,
         CancellationToken cancellationToken = default)
     {
@@ -212,7 +212,7 @@ public class VpnServiceClient : IVpnServiceClient
                 throw new InvalidOperationException("Resposta vazia do serviço VPN");
             }
 
-            return new RouterWireGuardConfigDto
+            return new VpnPeerConfigDto
             {
                 ConfigContent = result.ConfigContent,
                 FileName = result.Filename

@@ -258,13 +258,14 @@ builder.Services.AddScoped<IApplicationRepository, ApplicationRepository>();
 builder.Services.AddScoped<IDeviceRepository, DeviceRepository>();
 builder.Services.AddScoped<IVpnNetworkRepository, VpnNetworkRepository>();
 builder.Services.AddScoped<IRouterRepository, RouterRepository>();
-builder.Services.AddScoped<IRouterWireGuardPeerRepository, RouterWireGuardPeerRepository>();
+builder.Services.AddScoped<IVpnPeerRepository, VpnPeerRepository>();
 builder.Services.AddScoped<IRouterAllowedNetworkRepository, RouterAllowedNetworkRepository>();
 builder.Services.AddScoped<IRouterStaticRouteRepository, Automais.Infrastructure.Repositories.RouterStaticRouteRepository>();
 builder.Services.AddScoped<IUserAllowedRouteRepository, Automais.Infrastructure.Repositories.UserAllowedRouteRepository>();
 builder.Services.AddScoped<IRouterConfigLogRepository, RouterConfigLogRepository>();
 builder.Services.AddScoped<IRouterBackupRepository, RouterBackupRepository>();
 builder.Services.AddScoped<IHostRepository, HostRepository>();
+builder.Services.AddScoped<IVpnIpAllocationService, VpnIpAllocationService>();
 builder.Services.AddScoped<IHostService, HostService>();
 
 // Services
@@ -334,15 +335,15 @@ builder.Services.AddHttpClient<Automais.Core.Interfaces.IRouterOsServiceClient, 
 // Registrar cliente WebSocket RouterOS
 builder.Services.AddScoped<Automais.Core.Interfaces.IRouterOsWebSocketClient, Automais.Infrastructure.Services.RouterOsWebSocketClient>();
 
-builder.Services.AddScoped<IRouterWireGuardService>(sp =>
+builder.Services.AddScoped<IVpnPeerService>(sp =>
 {
-    var peerRepo = sp.GetRequiredService<IRouterWireGuardPeerRepository>();
+    var peerRepo = sp.GetRequiredService<IVpnPeerRepository>();
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
     var vpnNetworkRepo = sp.GetRequiredService<IVpnNetworkRepository>();
     var vpnServiceClient = sp.GetRequiredService<Automais.Core.Interfaces.IVpnServiceClient>();
     var wireGuardSettings = sp.GetRequiredService<IOptions<WireGuardSettings>>();
-    var logger = sp.GetService<ILogger<Automais.Core.Services.RouterWireGuardService>>();
-    return new Automais.Core.Services.RouterWireGuardService(peerRepo, routerRepo, vpnNetworkRepo, wireGuardSettings, vpnServiceClient, logger);
+    var logger = sp.GetService<ILogger<Automais.Core.Services.VpnPeerService>>();
+    return new Automais.Core.Services.VpnPeerService(peerRepo, routerRepo, vpnNetworkRepo, wireGuardSettings, vpnServiceClient, logger);
 });
 
 builder.Services.AddScoped<IVpnNetworkService>(sp =>
@@ -353,22 +354,22 @@ builder.Services.AddScoped<IVpnNetworkService>(sp =>
     var tenantUserService = sp.GetRequiredService<ITenantUserService>();
     var wireGuardSettings = sp.GetRequiredService<IOptions<WireGuardSettings>>();
     var vpnServiceClient = sp.GetService<Automais.Core.Interfaces.IVpnServiceClient>();
-    var routerWg = sp.GetRequiredService<IRouterWireGuardService>();
-    return new VpnNetworkService(tenantRepo, vpnNetworkRepo, deviceRepo, tenantUserService, wireGuardSettings, vpnServiceClient, routerWg);
+    var vpnPeerService = sp.GetRequiredService<IVpnPeerService>();
+    return new VpnNetworkService(tenantRepo, vpnNetworkRepo, deviceRepo, tenantUserService, wireGuardSettings, vpnServiceClient, vpnPeerService);
 });
 
-// Registrar RouterService com RouterWireGuardService como dependência opcional
+// Registrar RouterService com IVpnPeerService como dependência opcional
 // RouterOsClient removido - comunicação RouterOS agora é feita via servidor VPN
 builder.Services.AddScoped<IRouterService>(sp =>
 {
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
     var tenantRepo = sp.GetRequiredService<ITenantRepository>();
     var allowedNetworkRepo = sp.GetService<IRouterAllowedNetworkRepository>();
-    var wireGuardService = sp.GetService<IRouterWireGuardService>(); // Opcional
+    var vpnPeerService = sp.GetService<IVpnPeerService>(); // Opcional
     var vpnNetworkRepo = sp.GetService<IVpnNetworkRepository>(); // Opcional
     var logger = sp.GetService<ILogger<Automais.Core.Services.RouterService>>();
-    var peerRepo = sp.GetService<IRouterWireGuardPeerRepository>();
-    return new Automais.Core.Services.RouterService(routerRepo, tenantRepo, allowedNetworkRepo, wireGuardService, vpnNetworkRepo, peerRepo, logger);
+    var peerRepo = sp.GetService<IVpnPeerRepository>();
+    return new Automais.Core.Services.RouterService(routerRepo, tenantRepo, allowedNetworkRepo, vpnPeerService, vpnNetworkRepo, peerRepo, logger);
 });
 
 // Registrar RouterStaticRouteService
@@ -385,7 +386,7 @@ builder.Services.AddScoped<IRouterAllowedNetworkService>(sp =>
 {
     var allowedRepo = sp.GetRequiredService<IRouterAllowedNetworkRepository>();
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
-    var peerRepo = sp.GetRequiredService<IRouterWireGuardPeerRepository>();
+    var peerRepo = sp.GetRequiredService<IVpnPeerRepository>();
     var logger = sp.GetService<ILogger<Automais.Core.Services.RouterAllowedNetworkService>>();
     return new Automais.Core.Services.RouterAllowedNetworkService(allowedRepo, routerRepo, peerRepo, logger);
 });

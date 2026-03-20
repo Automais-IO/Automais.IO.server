@@ -31,7 +31,7 @@ public interface IVpnServiceClient
     /// <summary>
     /// Obtém a configuração WireGuard para um router
     /// </summary>
-    Task<RouterWireGuardConfigDto> GetConfigAsync(
+    Task<VpnPeerConfigDto> GetConfigAsync(
         Guid routerId,
         CancellationToken cancellationToken = default);
 

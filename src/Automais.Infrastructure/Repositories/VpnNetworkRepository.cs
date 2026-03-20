@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Automais.Infrastructure.Repositories;
 
 /// <summary>
-/// Implementação EF Core para redes VPN e memberships.
+/// Implementação EF Core para redes VPN.
 /// </summary>
 public class VpnNetworkRepository : IVpnNetworkRepository
 {
@@ -17,9 +17,6 @@ public class VpnNetworkRepository : IVpnNetworkRepository
         _context = context;
     }
 
-    /// <summary>
-    /// Obtém todas as VpnNetworks do sistema (para sincronização WireGuard)
-    /// </summary>
     public async Task<IEnumerable<VpnNetwork>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.VpnNetworks
@@ -30,7 +27,6 @@ public class VpnNetworkRepository : IVpnNetworkRepository
     public async Task<VpnNetwork?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.VpnNetworks
-            .Include(n => n.Memberships)
             .FirstOrDefaultAsync(n => n.Id == id, cancellationToken);
     }
 
@@ -38,9 +34,7 @@ public class VpnNetworkRepository : IVpnNetworkRepository
     {
         var idList = ids.ToList();
         if (idList.Count == 0)
-        {
             return Enumerable.Empty<VpnNetwork>();
-        }
 
         return await _context.VpnNetworks
             .Where(n => idList.Contains(n.Id))
@@ -73,9 +67,7 @@ public class VpnNetworkRepository : IVpnNetworkRepository
     {
         var network = await _context.VpnNetworks.FirstOrDefaultAsync(n => n.Id == id, cancellationToken);
         if (network == null)
-        {
             return;
-        }
 
         _context.VpnNetworks.Remove(network);
         await _context.SaveChangesAsync(cancellationToken);
@@ -87,62 +79,13 @@ public class VpnNetworkRepository : IVpnNetworkRepository
             .AnyAsync(n => n.TenantId == tenantId && n.Slug == slug, cancellationToken);
     }
 
-    public async Task<IEnumerable<VpnNetworkMembership>> GetMembershipsByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<VpnNetwork?> GetDefaultOrFirstForTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
-        return await _context.VpnNetworkMemberships
-            .Where(m => m.TenantUserId == userId)
-            .ToListAsync(cancellationToken);
-    }
-
-    public async Task<IEnumerable<VpnNetworkMembership>> GetMembershipsByNetworkIdAsync(Guid networkId, CancellationToken cancellationToken = default)
-    {
-        return await _context.VpnNetworkMemberships
-            .Where(m => m.VpnNetworkId == networkId)
-            .ToListAsync(cancellationToken);
-    }
-
-    public async Task<int> CountMembershipsByNetworkIdAsync(Guid networkId, CancellationToken cancellationToken = default)
-    {
-        return await _context.VpnNetworkMemberships
-            .CountAsync(m => m.VpnNetworkId == networkId, cancellationToken);
-    }
-
-    public async Task ReplaceUserMembershipsAsync(Guid tenantId, Guid userId, IEnumerable<Guid> networkIds, CancellationToken cancellationToken = default)
-    {
-        var currentMemberships = await _context.VpnNetworkMemberships
-            .Where(m => m.TenantUserId == userId)
-            .ToListAsync(cancellationToken);
-
-        _context.VpnNetworkMemberships.RemoveRange(currentMemberships);
-
-        foreach (var networkId in networkIds.Distinct())
-        {
-            _context.VpnNetworkMemberships.Add(new VpnNetworkMembership
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                VpnNetworkId = networkId,
-                TenantUserId = userId,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task RemoveMembershipsByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        var memberships = await _context.VpnNetworkMemberships
-            .Where(m => m.TenantUserId == userId)
-            .ToListAsync(cancellationToken);
-
-        if (memberships.Count == 0)
-        {
-            return;
-        }
-
-        _context.VpnNetworkMemberships.RemoveRange(memberships);
-        await _context.SaveChangesAsync(cancellationToken);
+        return await _context.VpnNetworks
+            .Where(n => n.TenantId == tenantId)
+            .OrderByDescending(n => n.IsDefault)
+            .ThenBy(n => n.Name)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<int>> GetListenPortsForServerEndpointAsync(string? serverEndpoint, Guid? excludeNetworkId, CancellationToken cancellationToken = default)
@@ -159,5 +102,3 @@ public class VpnNetworkRepository : IVpnNetworkRepository
     private static string NormalizeServerEndpoint(string? s) =>
         string.IsNullOrWhiteSpace(s) ? "" : s.Trim().ToLowerInvariant();
 }
-
-

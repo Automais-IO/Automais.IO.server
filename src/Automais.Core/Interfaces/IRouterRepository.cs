@@ -8,6 +8,8 @@ namespace Automais.Core.Interfaces;
 public interface IRouterRepository
 {
     Task<Router?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <summary>Router cujo <see cref="Router.VpnPeerId"/> aponta para este peer.</summary>
+    Task<Router?> GetByVpnPeerIdAsync(Guid vpnPeerId, CancellationToken cancellationToken = default);
     Task<Router?> GetBySerialNumberAsync(string serialNumber, CancellationToken cancellationToken = default);
     Task<IEnumerable<Router>> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<IEnumerable<Router>> GetAllAsync(CancellationToken cancellationToken = default);

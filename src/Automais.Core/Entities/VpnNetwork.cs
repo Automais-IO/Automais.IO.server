@@ -45,7 +45,6 @@ public class VpnNetwork
 
     // Navigation properties
     public Tenant Tenant { get; set; } = null!;
-    public ICollection<VpnNetworkMembership> Memberships { get; set; } = new List<VpnNetworkMembership>();
     public ICollection<Device> Devices { get; set; } = new List<Device>();
 }
 

@@ -6,71 +6,72 @@ using System.Text;
 
 namespace Automais.Api.Controllers;
 
+/// <summary>API de peers (<c>vpn_peers</c>). Rotas mantêm <c>wireguard</c> na URL por compatibilidade com clientes.</summary>
 [ApiController]
 [Route("api")]
 [Produces("application/json")]
-public class RouterWireGuardController : ControllerBase
+public class VpnPeersController : ControllerBase
 {
-    private readonly IRouterWireGuardService _wireGuardService;
-    private readonly ILogger<RouterWireGuardController> _logger;
+    private readonly IVpnPeerService _vpnPeerService;
+    private readonly ILogger<VpnPeersController> _logger;
 
-    public RouterWireGuardController(
-        IRouterWireGuardService wireGuardService,
-        ILogger<RouterWireGuardController> logger)
+    public VpnPeersController(
+        IVpnPeerService vpnPeerService,
+        ILogger<VpnPeersController> logger)
     {
-        _wireGuardService = wireGuardService;
+        _vpnPeerService = vpnPeerService;
         _logger = logger;
     }
 
     [HttpGet("routers/{routerId:guid}/wireguard/peers")]
-    public async Task<ActionResult<IEnumerable<RouterWireGuardPeerDto>>> GetPeers(Guid routerId, CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<VpnPeerDto>>> GetPeers(Guid routerId, CancellationToken cancellationToken)
     {
-        var peers = await _wireGuardService.GetByRouterIdAsync(routerId, cancellationToken);
+        var peers = await _vpnPeerService.GetByRouterIdAsync(routerId, cancellationToken);
         return Ok(peers);
     }
 
     [HttpGet("wireguard/peers/{id:guid}")]
-    public async Task<ActionResult<RouterWireGuardPeerDto>> GetPeerById(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<VpnPeerDto>> GetPeerById(Guid id, CancellationToken cancellationToken)
     {
-        var peer = await _wireGuardService.GetByIdAsync(id, cancellationToken);
+        var peer = await _vpnPeerService.GetByIdAsync(id, cancellationToken);
         if (peer == null)
         {
-            return NotFound(new { message = $"Peer WireGuard com ID {id} não encontrado" });
+            return NotFound(new { message = $"Peer VPN com ID {id} não encontrado" });
         }
         return Ok(peer);
     }
 
     [HttpPost("routers/{routerId:guid}/wireguard/peers")]
-    public async Task<ActionResult<RouterWireGuardPeerDto>> CreatePeer(Guid routerId, [FromBody] CreateRouterWireGuardPeerDto dto, CancellationToken cancellationToken)
+    public async Task<ActionResult<VpnPeerDto>> CreatePeer(Guid routerId, [FromBody] CreateVpnPeerDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            var created = await _wireGuardService.CreatePeerAsync(routerId, dto, cancellationToken);
+            var created = await _vpnPeerService.CreatePeerAsync(routerId, dto, cancellationToken);
             return CreatedAtAction(nameof(GetPeerById), new { id = created.Id }, created);
         }
         catch (KeyNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Erro ao criar peer WireGuard");
+            _logger.LogWarning(ex, "Erro ao criar peer VPN");
             return NotFound(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Erro ao criar peer WireGuard");
+            _logger.LogWarning(ex, "Erro ao criar peer VPN");
             return BadRequest(new { message = ex.Message });
         }
     }
 
     [HttpPut("wireguard/peers/{id:guid}")]
-    public async Task<ActionResult<RouterWireGuardPeerDto>> UpdatePeer(Guid id, [FromBody] CreateRouterWireGuardPeerDto dto, CancellationToken cancellationToken)
+    public async Task<ActionResult<VpnPeerDto>> UpdatePeer(Guid id, [FromBody] CreateVpnPeerDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            var updated = await _wireGuardService.UpdatePeerAsync(id, dto, cancellationToken);
+            var updated = await _vpnPeerService.UpdatePeerAsync(id, dto, cancellationToken);
             return Ok(updated);
         }
         catch (KeyNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Peer WireGuard não encontrado");
+            _logger.LogWarning(ex, "Peer VPN não encontrado");
             return NotFound(new { message = ex.Message });
         }
     }
@@ -78,28 +79,26 @@ public class RouterWireGuardController : ControllerBase
     [HttpDelete("wireguard/peers/{id:guid}")]
     public async Task<IActionResult> DeletePeer(Guid id, CancellationToken cancellationToken)
     {
-        await _wireGuardService.DeletePeerAsync(id, cancellationToken);
+        await _vpnPeerService.DeletePeerAsync(id, cancellationToken);
         return NoContent();
     }
 
     [HttpGet("wireguard/peers/{id:guid}/config")]
-    public async Task<ActionResult<RouterWireGuardConfigDto>> GetConfig(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<VpnPeerConfigDto>> GetConfig(Guid id, CancellationToken cancellationToken)
     {
         try
         {
-            var config = await _wireGuardService.GetConfigAsync(id, cancellationToken);
+            var config = await _vpnPeerService.GetConfigAsync(id, cancellationToken);
             return Ok(config);
         }
         catch (KeyNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Peer WireGuard não encontrado");
+            _logger.LogWarning(ex, "Peer VPN não encontrado");
             return NotFound(new { message = ex.Message });
         }
     }
 
-    /// <summary>
-    /// Download da configuração WireGuard do router (arquivo .conf)
-    /// </summary>
+    /// <summary>Download da configuração WireGuard do router (arquivo .conf)</summary>
     [HttpGet("routers/{routerId:guid}/wireguard/config/download")]
     public async Task<IActionResult> DownloadConfig(
         Guid routerId,
@@ -107,15 +106,14 @@ public class RouterWireGuardController : ControllerBase
     {
         try
         {
-            // Buscar peer do router
-            var peers = await _wireGuardService.GetByRouterIdAsync(routerId, cancellationToken);
+            var peers = await _vpnPeerService.GetByRouterIdAsync(routerId, cancellationToken);
             var peer = peers.FirstOrDefault();
             if (peer == null)
             {
-                return NotFound(new { message = $"Router {routerId} não possui peer WireGuard configurado" });
+                return NotFound(new { message = $"Router {routerId} não possui peer VPN configurado" });
             }
             
-            var config = await _wireGuardService.GetConfigAsync(peer.Id, cancellationToken);
+            var config = await _vpnPeerService.GetConfigAsync(peer.Id, cancellationToken);
             
             if (string.IsNullOrEmpty(config.ConfigContent))
             {
@@ -128,7 +126,6 @@ public class RouterWireGuardController : ControllerBase
             
             var bytes = Encoding.UTF8.GetBytes(config.ConfigContent);
             
-            // Sanitizar o nome do arquivo removendo caracteres problemáticos
             var fileName = config.FileName
                 .Replace("\"", "")
                 .Replace("\\", "")
@@ -140,13 +137,11 @@ public class RouterWireGuardController : ControllerBase
                 .Replace(">", "")
                 .Replace("|", "");
             
-            // Garantir que o nome do arquivo termina com .conf (sem underscore)
             if (!fileName.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
             {
-                // Se não termina com .conf, adicionar
                 if (fileName.EndsWith(".conf_", StringComparison.OrdinalIgnoreCase))
                 {
-                    fileName = fileName.Substring(0, fileName.Length - 1); // Remove o underscore
+                    fileName = fileName.Substring(0, fileName.Length - 1);
                 }
                 else if (!fileName.Contains("."))
                 {
@@ -154,7 +149,6 @@ public class RouterWireGuardController : ControllerBase
                 }
             }
             
-            // Configurar o header Content-Disposition usando ContentDispositionHeaderValue
             var contentDisposition = new ContentDispositionHeaderValue("attachment")
             {
                 FileName = fileName
@@ -192,16 +186,16 @@ public class RouterWireGuardController : ControllerBase
     }
 
     [HttpPost("wireguard/peers/{id:guid}/regenerate-keys")]
-    public async Task<ActionResult<RouterWireGuardPeerDto>> RegenerateKeys(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<VpnPeerDto>> RegenerateKeys(Guid id, CancellationToken cancellationToken)
     {
         try
         {
-            var updated = await _wireGuardService.RegenerateKeysAsync(id, cancellationToken);
+            var updated = await _vpnPeerService.RegenerateKeysAsync(id, cancellationToken);
             return Ok(updated);
         }
         catch (KeyNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Peer WireGuard não encontrado");
+            _logger.LogWarning(ex, "Peer VPN não encontrado");
             return NotFound(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
@@ -211,23 +205,19 @@ public class RouterWireGuardController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Atualiza estatísticas do peer (handshake, bytes, ping)
-    /// Usado pelo serviço de monitoramento Python
-    /// </summary>
+    /// <summary>Atualiza estatísticas do peer (serviço de monitoramento Python).</summary>
     [HttpPatch("wireguard/peers/{id:guid}/stats")]
     public async Task<IActionResult> UpdatePeerStats(Guid id, [FromBody] UpdatePeerStatsDto dto, CancellationToken cancellationToken)
     {
         try
         {
-            await _wireGuardService.UpdatePeerStatsAsync(id, dto, cancellationToken);
+            await _vpnPeerService.UpdatePeerStatsAsync(id, dto, cancellationToken);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Peer WireGuard não encontrado para atualizar stats");
+            _logger.LogWarning(ex, "Peer VPN não encontrado para atualizar stats");
             return NotFound(new { message = ex.Message });
         }
     }
 }
-

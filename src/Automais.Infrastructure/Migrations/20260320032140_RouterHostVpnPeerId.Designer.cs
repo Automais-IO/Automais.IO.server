@@ -3,6 +3,7 @@ using System;
 using Automais.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Automais.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260320032140_RouterHostVpnPeerId")]
+    partial class RouterHostVpnPeerId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -615,6 +618,80 @@ namespace Automais.Infrastructure.Migrations
                     b.ToTable("router_static_routes", "public");
                 });
 
+            modelBuilder.Entity("Automais.Core.Entities.RouterWireGuardPeer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("BytesReceived")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("BytesSent")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ConfigContent")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Endpoint")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastHandshake")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PeerIp")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<double?>("PingAvgTimeMs")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("PingPacketLoss")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool?>("PingSuccess")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PrivateKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PublicKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("RouterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("VpnNetworkId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RouterId");
+
+                    b.HasIndex("VpnNetworkId");
+
+                    b.HasIndex("RouterId", "VpnNetworkId")
+                        .IsUnique()
+                        .HasFilter("\"RouterId\" IS NOT NULL");
+
+                    b.ToTable("vpn_peers", "public");
+                });
+
             modelBuilder.Entity("Automais.Core.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -840,66 +917,36 @@ namespace Automais.Infrastructure.Migrations
                     b.ToTable("vpn_networks", "public");
                 });
 
-            modelBuilder.Entity("Automais.Core.Entities.VpnPeer", b =>
+            modelBuilder.Entity("Automais.Core.Entities.VpnNetworkMembership", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<long?>("BytesReceived")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("BytesSent")
-                        .HasColumnType("bigint");
+                    b.Property<string>("AssignedIp")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Endpoint")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
 
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastHandshake")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PeerIp")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<double?>("PingAvgTimeMs")
-                        .HasColumnType("double precision");
-
-                    b.Property<double?>("PingPacketLoss")
-                        .HasColumnType("double precision");
-
-                    b.Property<bool?>("PingSuccess")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("PrivateKey")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("PublicKey")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("TenantUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("VpnNetworkId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("VpnNetworkId");
+                    b.HasIndex("TenantUserId");
 
-                    b.ToTable("vpn_peers", "public");
+                    b.HasIndex("VpnNetworkId", "TenantUserId")
+                        .IsUnique();
+
+                    b.ToTable("vpn_network_memberships", "public");
                 });
 
             modelBuilder.Entity("Automais.Core.Entities.Application", b =>
@@ -963,7 +1010,7 @@ namespace Automais.Infrastructure.Migrations
                         .HasForeignKey("VpnNetworkId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Automais.Core.Entities.VpnPeer", "VpnPeer")
+                    b.HasOne("Automais.Core.Entities.RouterWireGuardPeer", "VpnPeer")
                         .WithMany()
                         .HasForeignKey("VpnPeerId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -988,7 +1035,7 @@ namespace Automais.Infrastructure.Migrations
                         .HasForeignKey("VpnNetworkId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Automais.Core.Entities.VpnPeer", "VpnPeer")
+                    b.HasOne("Automais.Core.Entities.RouterWireGuardPeer", "VpnPeer")
                         .WithMany()
                         .HasForeignKey("VpnPeerId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -1074,6 +1121,24 @@ namespace Automais.Infrastructure.Migrations
                     b.Navigation("Router");
                 });
 
+            modelBuilder.Entity("Automais.Core.Entities.RouterWireGuardPeer", b =>
+                {
+                    b.HasOne("Automais.Core.Entities.Router", "Router")
+                        .WithMany("WireGuardPeers")
+                        .HasForeignKey("RouterId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Automais.Core.Entities.VpnNetwork", "VpnNetwork")
+                        .WithMany()
+                        .HasForeignKey("VpnNetworkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Router");
+
+                    b.Navigation("VpnNetwork");
+                });
+
             modelBuilder.Entity("Automais.Core.Entities.TenantUser", b =>
                 {
                     b.HasOne("Automais.Core.Entities.Tenant", "Tenant")
@@ -1123,13 +1188,21 @@ namespace Automais.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Automais.Core.Entities.VpnPeer", b =>
+            modelBuilder.Entity("Automais.Core.Entities.VpnNetworkMembership", b =>
                 {
+                    b.HasOne("Automais.Core.Entities.TenantUser", "TenantUser")
+                        .WithMany("VpnMemberships")
+                        .HasForeignKey("TenantUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Automais.Core.Entities.VpnNetwork", "VpnNetwork")
-                        .WithMany()
+                        .WithMany("Memberships")
                         .HasForeignKey("VpnNetworkId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("TenantUser");
 
                     b.Navigation("VpnNetwork");
                 });
@@ -1146,6 +1219,8 @@ namespace Automais.Infrastructure.Migrations
                     b.Navigation("ConfigLogs");
 
                     b.Navigation("StaticRoutes");
+
+                    b.Navigation("WireGuardPeers");
                 });
 
             modelBuilder.Entity("Automais.Core.Entities.Tenant", b =>
@@ -1161,9 +1236,16 @@ namespace Automais.Infrastructure.Migrations
                     b.Navigation("VpnNetworks");
                 });
 
+            modelBuilder.Entity("Automais.Core.Entities.TenantUser", b =>
+                {
+                    b.Navigation("VpnMemberships");
+                });
+
             modelBuilder.Entity("Automais.Core.Entities.VpnNetwork", b =>
                 {
                     b.Navigation("Devices");
+
+                    b.Navigation("Memberships");
                 });
 #pragma warning restore 612, 618
         }

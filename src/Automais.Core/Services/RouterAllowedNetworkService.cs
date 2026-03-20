@@ -16,13 +16,13 @@ public class RouterAllowedNetworkService : IRouterAllowedNetworkService
 
     private readonly IRouterAllowedNetworkRepository _allowedNetworkRepository;
     private readonly IRouterRepository _routerRepository;
-    private readonly IRouterWireGuardPeerRepository _peerRepository;
+    private readonly IVpnPeerRepository _peerRepository;
     private readonly ILogger<RouterAllowedNetworkService>? _logger;
 
     public RouterAllowedNetworkService(
         IRouterAllowedNetworkRepository allowedNetworkRepository,
         IRouterRepository routerRepository,
-        IRouterWireGuardPeerRepository peerRepository,
+        IVpnPeerRepository peerRepository,
         ILogger<RouterAllowedNetworkService>? logger = null)
     {
         _allowedNetworkRepository = allowedNetworkRepository;

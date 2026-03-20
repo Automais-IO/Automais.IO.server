@@ -15,20 +15,23 @@ public class VpnServersController : ControllerBase
 {
     private readonly IVpnNetworkRepository _vpnNetworkRepository;
     private readonly IRouterRepository _routerRepository;
-    private readonly IRouterWireGuardPeerRepository _peerRepository;
+    private readonly IVpnPeerRepository _peerRepository;
+    private readonly IHostRepository _hostRepository;
     private readonly ILogger<VpnServersController> _logger;
     private readonly IConfiguration _configuration;
 
     public VpnServersController(
         IVpnNetworkRepository vpnNetworkRepository,
         IRouterRepository routerRepository,
-        IRouterWireGuardPeerRepository peerRepository,
+        IVpnPeerRepository peerRepository,
+        IHostRepository hostRepository,
         ILogger<VpnServersController> logger,
         IConfiguration configuration)
     {
         _vpnNetworkRepository = vpnNetworkRepository;
         _routerRepository = routerRepository;
         _peerRepository = peerRepository;
+        _hostRepository = hostRepository;
         _logger = logger;
         _configuration = configuration;
     }
@@ -92,7 +95,8 @@ public class VpnServersController : ControllerBase
                     .Select(p => new
                     {
                         id = p.Id.ToString(),
-                        router_id = p.RouterId.ToString(),
+                        router_id = router.Id.ToString(),
+                        host_id = (string?)null,
                         vpn_network_id = p.VpnNetworkId.ToString(),
                         public_key = p.PublicKey,
                         peer_ip = p.PeerIp,
@@ -114,15 +118,49 @@ public class VpnServersController : ControllerBase
                 });
             }
 
+            var hostsManaged = await _hostRepository.GetByVpnNetworkIdsAsync(vpnNetworkIds, cancellationToken);
+            var hostsPayload = new List<object>();
+            foreach (var host in hostsManaged)
+            {
+                if (!host.VpnPeerId.HasValue)
+                    continue;
+                var hp = await _peerRepository.GetByIdAsync(host.VpnPeerId.Value, cancellationToken);
+                if (hp == null || !hp.IsEnabled || string.IsNullOrEmpty(hp.PublicKey) || string.IsNullOrEmpty(hp.PeerIp))
+                    continue;
+                hostsPayload.Add(new
+                {
+                    id = host.Id.ToString(),
+                    name = host.Name,
+                    vpn_network_id = host.VpnNetworkId?.ToString(),
+                    peers = new[]
+                    {
+                        new
+                        {
+                            id = hp.Id.ToString(),
+                            router_id = (string?)null,
+                            host_id = host.Id.ToString(),
+                            vpn_network_id = hp.VpnNetworkId.ToString(),
+                            public_key = hp.PublicKey,
+                            peer_ip = hp.PeerIp,
+                            allowed_ips = hp.PeerIp,
+                            endpoint = hp.Endpoint,
+                            listen_port = vpnPortById.GetValueOrDefault(hp.VpnNetworkId.ToString(), 51820),
+                            is_enabled = hp.IsEnabled
+                        }
+                    }
+                });
+            }
+
             _logger.LogInformation(
-                "Servidor VPN com endpoint '{Endpoint}' gerencia {VpnCount} VPNs e {RouterCount} Routers",
-                endpoint, vpnNetworks.Count, routers.Count);
+                "Servidor VPN com endpoint '{Endpoint}' gerencia {VpnCount} VPNs, {RouterCount} Routers e {HostCount} Hosts",
+                endpoint, vpnNetworks.Count, routers.Count, hostsPayload.Count);
 
             return Ok(new
             {
                 endpoint = endpoint,
                 vpn_networks = vpnNetworks,
                 routers = routers,
+                hosts = hostsPayload,
                 timestamp = DateTime.UtcNow
             });
         }

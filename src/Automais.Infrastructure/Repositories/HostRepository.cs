@@ -76,4 +76,18 @@ public class HostRepository : IHostRepository
             await _context.SaveChangesAsync(cancellationToken);
         }
     }
+
+    public async Task<IEnumerable<Host>> GetByVpnNetworkIdsAsync(IEnumerable<Guid> vpnNetworkIds, CancellationToken cancellationToken = default)
+    {
+        var idSet = vpnNetworkIds.Distinct().ToHashSet();
+        if (idSet.Count == 0)
+            return Array.Empty<Host>();
+
+        return await _context.Set<Host>()
+            .AsNoTracking()
+            .Include(h => h.VpnNetwork)
+            .Where(h => h.VpnNetworkId.HasValue && idSet.Contains(h.VpnNetworkId.Value))
+            .OrderBy(h => h.Name)
+            .ToListAsync(cancellationToken);
+    }
 }

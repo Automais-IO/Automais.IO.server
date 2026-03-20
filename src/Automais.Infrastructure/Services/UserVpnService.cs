@@ -46,20 +46,10 @@ public class UserVpnService : IUserVpnService
         // Garantir que o usuário está provisionado
         await EnsureUserVpnProvisionedAsync(userId, cancellationToken);
 
-        // Buscar redes VPN do usuário
-        var memberships = await _vpnNetworkRepository.GetMembershipsByUserIdAsync(userId, cancellationToken);
-        var networkIds = memberships.Select(m => m.VpnNetworkId).Distinct().ToList();
-        
-        if (!networkIds.Any())
-        {
-            throw new InvalidOperationException("Usuário não está associado a nenhuma rede VPN.");
-        }
-
-        // Usar a primeira rede VPN (ou podemos permitir múltiplas)
-        var vpnNetwork = await _vpnNetworkRepository.GetByIdAsync(networkIds.First(), cancellationToken);
+        var vpnNetwork = await _vpnNetworkRepository.GetDefaultOrFirstForTenantAsync(user.TenantId, cancellationToken);
         if (vpnNetwork == null)
         {
-            throw new KeyNotFoundException("Rede VPN não encontrada.");
+            throw new InvalidOperationException("Nenhuma rede VPN configurada para o tenant.");
         }
 
         // Gerar configuração WireGuard
@@ -112,19 +102,10 @@ public class UserVpnService : IUserVpnService
             return;
         }
 
-        // Buscar primeira rede VPN do usuário
-        var memberships = await _vpnNetworkRepository.GetMembershipsByUserIdAsync(userId, cancellationToken);
-        var networkIds = memberships.Select(m => m.VpnNetworkId).Distinct().ToList();
-        
-        if (!networkIds.Any())
-        {
-            throw new InvalidOperationException("Usuário não está associado a nenhuma rede VPN.");
-        }
-
-        var vpnNetwork = await _vpnNetworkRepository.GetByIdAsync(networkIds.First(), cancellationToken);
+        var vpnNetwork = await _vpnNetworkRepository.GetDefaultOrFirstForTenantAsync(user.TenantId, cancellationToken);
         if (vpnNetwork == null)
         {
-            throw new KeyNotFoundException("Rede VPN não encontrada.");
+            throw new InvalidOperationException("Nenhuma rede VPN configurada para o tenant.");
         }
 
         // Gerar chaves WireGuard

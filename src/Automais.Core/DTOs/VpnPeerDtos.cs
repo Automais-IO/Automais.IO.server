@@ -1,18 +1,17 @@
 namespace Automais.Core.DTOs;
 
-/// <summary>
-/// DTO para Router WireGuard Peer
-/// </summary>
-public class RouterWireGuardPeerDto
+/// <summary>DTO de linha em <c>vpn_peers</c>.</summary>
+public class VpnPeerDto
 {
     public Guid Id { get; set; }
-    public Guid RouterId { get; set; }
+    /// <summary>Null quando o peer é só de host Linux (sem Mikrotik).</summary>
+    public Guid? RouterId { get; set; }
     public Guid VpnNetworkId { get; set; }
     public string PublicKey { get; set; } = string.Empty;
     /// <summary>IP do peer na VPN (ex: 10.100.1.50/32). Endereço usado para conectar ao router.</summary>
     public string PeerIp { get; set; } = string.Empty;
     public string? Endpoint { get; set; }
-    /// <summary>Porta UDP do servidor WireGuard (da VpnNetwork associada).</summary>
+    /// <summary>Porta UDP do servidor VPN (da VpnNetwork associada).</summary>
     public int ListenPort { get; set; }
     public DateTime? LastHandshake { get; set; }
     public long? BytesReceived { get; set; }
@@ -25,10 +24,8 @@ public class RouterWireGuardPeerDto
     public DateTime UpdatedAt { get; set; }
 }
 
-/// <summary>
-/// DTO para criação de Router WireGuard Peer
-/// </summary>
-public class CreateRouterWireGuardPeerDto
+/// <summary>Criação/atualização de peer em <c>vpn_peers</c>.</summary>
+public class CreateVpnPeerDto
 {
     public Guid VpnNetworkId { get; set; }
     /// <summary>IP do peer na VPN (ex: 10.100.1.50/32). Pode incluir redes adicionais separadas por vírgula.</summary>
@@ -36,18 +33,14 @@ public class CreateRouterWireGuardPeerDto
     public string? Endpoint { get; set; }
 }
 
-/// <summary>
-/// DTO para download de configuração WireGuard (.conf)
-/// </summary>
-public class RouterWireGuardConfigDto
+/// <summary>Arquivo .conf montado sob demanda (não persiste em <c>vpn_peers</c>).</summary>
+public class VpnPeerConfigDto
 {
     public string ConfigContent { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// DTO para atualização de estatísticas do peer
-/// </summary>
+/// <summary>Atualização de estatísticas do peer (monitoramento).</summary>
 public class UpdatePeerStatsDto
 {
     public DateTime? LastHandshake { get; set; }
@@ -57,4 +50,3 @@ public class UpdatePeerStatsDto
     public double? PingAvgTimeMs { get; set; }
     public double? PingPacketLoss { get; set; }
 }
-

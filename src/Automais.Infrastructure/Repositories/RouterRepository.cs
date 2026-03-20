@@ -28,6 +28,14 @@ public class RouterRepository : IRouterRepository
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
+    public async Task<Router?> GetByVpnPeerIdAsync(Guid vpnPeerId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Set<Router>()
+            .Include(r => r.Tenant)
+            .Include(r => r.VpnNetwork)
+            .FirstOrDefaultAsync(r => r.VpnPeerId == vpnPeerId, cancellationToken);
+    }
+
     public async Task<Router?> GetBySerialNumberAsync(string serialNumber, CancellationToken cancellationToken = default)
     {
         return await _context.Set<Router>()

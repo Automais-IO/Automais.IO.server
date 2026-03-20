@@ -12,17 +12,20 @@ public class HostsController : ControllerBase
 {
     private readonly IHostService _hostService;
     private readonly IAuthService _authService;
+    private readonly IVpnIpAllocationService _ipAlloc;
     private readonly ILogger<HostsController> _logger;
     private readonly IConfiguration _configuration;
 
     public HostsController(
         IHostService hostService,
         IAuthService authService,
+        IVpnIpAllocationService ipAlloc,
         ILogger<HostsController> logger,
         IConfiguration configuration)
     {
         _hostService = hostService;
         _authService = authService;
+        _ipAlloc = ipAlloc;
         _logger = logger;
         _configuration = configuration;
     }
@@ -175,6 +178,30 @@ public class HostsController : ControllerBase
         {
             _logger.LogError(ex, "Erro ao deletar host {HostId}", id);
             return StatusCode(500, new { message = "Erro interno ao deletar host", detail = ex.Message });
+        }
+    }
+
+    /// <summary>Preview do próximo IP disponível na rede VPN (não persiste).</summary>
+    [HttpGet("vpn-networks/{vpnNetworkId:guid}/next-available-ip")]
+    public async Task<ActionResult<object>> GetNextAvailableIp(Guid vpnNetworkId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var ip = await _ipAlloc.PreviewNextIpAsync(vpnNetworkId, cancellationToken);
+            return Ok(new { ip });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao buscar próximo IP para rede {VpnNetworkId}", vpnNetworkId);
+            return StatusCode(500, new { message = "Erro interno", detail = ex.Message });
         }
     }
 }

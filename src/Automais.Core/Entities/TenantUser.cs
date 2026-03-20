@@ -31,7 +31,6 @@ public class TenantUser
 
     // Navigation properties
     public Tenant Tenant { get; set; } = null!;
-    public ICollection<VpnNetworkMembership> VpnMemberships { get; set; } = new List<VpnNetworkMembership>();
 }
 
 public enum TenantUserRole

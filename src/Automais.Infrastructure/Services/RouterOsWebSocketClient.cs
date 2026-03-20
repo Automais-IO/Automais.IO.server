@@ -25,14 +25,14 @@ public class RouterOsWebSocketClient : IRouterOsWebSocketClient
     private readonly RouterOsWebSocketOptions _options;
     private readonly ILogger<RouterOsWebSocketClient> _logger;
     private readonly IRouterRepository _routerRepository;
-    private readonly IRouterWireGuardPeerRepository _peerRepository;
+    private readonly IVpnPeerRepository _peerRepository;
     private readonly IVpnNetworkRepository? _vpnNetworkRepository;
 
     public RouterOsWebSocketClient(
         IOptions<RouterOsWebSocketOptions> options,
         ILogger<RouterOsWebSocketClient> logger,
         IRouterRepository routerRepository,
-        IRouterWireGuardPeerRepository peerRepository,
+        IVpnPeerRepository peerRepository,
         IVpnNetworkRepository? vpnNetworkRepository = null)
     {
         _options = options.Value;

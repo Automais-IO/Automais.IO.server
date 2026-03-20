@@ -14,7 +14,7 @@ public class VpnNetworkService : IVpnNetworkService
     private readonly ITenantUserService _tenantUserService;
     private readonly WireGuardSettings _wireGuardSettings;
     private readonly IVpnServiceClient? _vpnServiceClient;
-    private readonly IRouterWireGuardService? _routerWireGuardService;
+    private readonly IVpnPeerService? _vpnPeerService;
 
     public VpnNetworkService(
         ITenantRepository tenantRepository,
@@ -23,7 +23,7 @@ public class VpnNetworkService : IVpnNetworkService
         ITenantUserService tenantUserService,
         IOptions<WireGuardSettings> wireGuardSettings,
         IVpnServiceClient? vpnServiceClient = null,
-        IRouterWireGuardService? routerWireGuardService = null)
+        IVpnPeerService? vpnPeerService = null)
     {
         _tenantRepository = tenantRepository;
         _vpnNetworkRepository = vpnNetworkRepository;
@@ -31,7 +31,7 @@ public class VpnNetworkService : IVpnNetworkService
         _tenantUserService = tenantUserService;
         _wireGuardSettings = wireGuardSettings.Value;
         _vpnServiceClient = vpnServiceClient;
-        _routerWireGuardService = routerWireGuardService;
+        _vpnPeerService = vpnPeerService;
     }
 
     public async Task<IEnumerable<VpnNetworkDto>> GetByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -201,9 +201,9 @@ public class VpnNetworkService : IVpnNetworkService
         network.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _vpnNetworkRepository.UpdateAsync(network, cancellationToken);
-        if ((listenPortChanged || serverEndpointChanged) && _routerWireGuardService != null)
+        if ((listenPortChanged || serverEndpointChanged) && _vpnPeerService != null)
         {
-            await _routerWireGuardService.RefreshPeerConfigsForNetworkAsync(network.Id, cancellationToken);
+            await _vpnPeerService.RefreshPeerConfigsForNetworkAsync(network.Id, cancellationToken);
         }
 
         return await MapToDtoAsync(updated, cancellationToken);
@@ -250,9 +250,9 @@ public class VpnNetworkService : IVpnNetworkService
         network.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _vpnNetworkRepository.UpdateAsync(network, cancellationToken);
-        if (_routerWireGuardService != null)
+        if (_vpnPeerService != null)
         {
-            await _routerWireGuardService.RefreshPeerConfigsForNetworkAsync(networkId, cancellationToken);
+            await _vpnPeerService.RefreshPeerConfigsForNetworkAsync(networkId, cancellationToken);
         }
 
         return await MapToDtoAsync(updated, cancellationToken);
@@ -266,24 +266,14 @@ public class VpnNetworkService : IVpnNetworkService
             throw new KeyNotFoundException($"Rede VPN com ID {networkId} não encontrada.");
         }
 
-        var memberships = await _vpnNetworkRepository.GetMembershipsByNetworkIdAsync(networkId, cancellationToken);
-        var result = new List<TenantUserDto>();
-
-        foreach (var membership in memberships)
-        {
-            var user = await _tenantUserService.GetByIdAsync(membership.TenantUserId, cancellationToken);
-            if (user != null)
-            {
-                result.Add(user);
-            }
-        }
-
-        return result;
+        // Sem vpn_network_memberships: não há lista de usuários por rede neste modelo.
+        _ = network;
+        return Enumerable.Empty<TenantUserDto>();
     }
 
     private async Task<VpnNetworkDto> MapToDtoAsync(VpnNetwork network, CancellationToken cancellationToken)
     {
-        var userCount = await _vpnNetworkRepository.CountMembershipsByNetworkIdAsync(network.Id, cancellationToken);
+        var userCount = 0;
         var deviceCount = await _deviceRepository.CountByNetworkIdAsync(network.Id, cancellationToken);
 
         var hasServerKeys = !string.IsNullOrWhiteSpace(network.ServerPrivateKey)

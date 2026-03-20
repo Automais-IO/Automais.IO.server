@@ -20,14 +20,12 @@ public class TenantUserRepository : ITenantUserRepository
     public async Task<TenantUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.TenantUsers
-            .Include(u => u.VpnMemberships)
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
     }
 
     public async Task<TenantUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         return await _context.TenantUsers
-            .Include(u => u.VpnMemberships)
             .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
     }
 

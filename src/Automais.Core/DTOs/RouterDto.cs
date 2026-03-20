@@ -41,7 +41,9 @@ public class RouterDto
     /// Redes destino: redes para as quais o tráfego VPN é encaminhado via este router (iptables/WG). Ex: ["10.0.1.0/24", "192.168.100.0/24"]
     /// </summary>
     public IEnumerable<string>? AllowedNetworks { get; set; }
-    /// <summary>Peer WireGuard para a VpnNetworkId atual, se existir.</summary>
+    /// <summary>FK para <c>vpn_peers</c> (peer principal do router).</summary>
+    public Guid? VpnPeerId { get; set; }
+    /// <summary>Compat.: mesmo valor que <see cref="VpnPeerId"/>.</summary>
     public Guid? WireGuardPeerId { get; set; }
     /// <summary>True se o peer tem public e private key preenchidos.</summary>
     public bool WireGuardPeerKeysConfigured { get; set; }

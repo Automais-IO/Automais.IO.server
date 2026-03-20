@@ -10,4 +10,7 @@ public interface IHostRepository
     Task<Host> CreateAsync(Host host, CancellationToken cancellationToken = default);
     Task<Host> UpdateAsync(Host host, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Hosts cuja <see cref="Host.VpnNetworkId"/> está na lista (para sync VPN server).</summary>
+    Task<IEnumerable<Host>> GetByVpnNetworkIdsAsync(IEnumerable<Guid> vpnNetworkIds, CancellationToken cancellationToken = default);
 }

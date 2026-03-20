@@ -19,9 +19,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Application> Applications => Set<Application>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<VpnNetwork> VpnNetworks => Set<VpnNetwork>();
-    public DbSet<VpnNetworkMembership> VpnNetworkMemberships => Set<VpnNetworkMembership>();
     public DbSet<Router> Routers => Set<Router>();
-    public DbSet<RouterWireGuardPeer> RouterWireGuardPeers => Set<RouterWireGuardPeer>();
+    public DbSet<VpnPeer> VpnPeers => Set<VpnPeer>();
     public DbSet<RouterAllowedNetwork> RouterAllowedNetworks => Set<RouterAllowedNetwork>();
     public DbSet<RouterStaticRoute> RouterStaticRoutes => Set<RouterStaticRoute>();
     public DbSet<UserAllowedRoute> UserAllowedRoutes => Set<UserAllowedRoute>();
@@ -278,36 +277,6 @@ public class ApplicationDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // Configuração de VpnNetworkMembership
-        modelBuilder.Entity<VpnNetworkMembership>(entity =>
-        {
-            entity.ToTable("vpn_network_memberships");
-
-            entity.HasKey(e => e.Id);
-
-            entity.Property(e => e.TenantId).IsRequired();
-            entity.Property(e => e.VpnNetworkId).IsRequired();
-            entity.Property(e => e.TenantUserId).IsRequired();
-
-            entity.HasIndex(e => new { e.VpnNetworkId, e.TenantUserId })
-                .IsUnique();
-
-            entity.Property(e => e.AssignedIp)
-                .HasMaxLength(50);
-
-            entity.Property(e => e.CreatedAt).IsRequired();
-
-            entity.HasOne(e => e.VpnNetwork)
-                .WithMany(n => n.Memberships)
-                .HasForeignKey(e => e.VpnNetworkId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.TenantUser)
-                .WithMany(u => u.VpnMemberships)
-                .HasForeignKey(e => e.TenantUserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
         // Configuração de Router
         modelBuilder.Entity<Router>(entity =>
         {
@@ -375,17 +344,22 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.VpnNetworkId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasOne(e => e.VpnPeer)
+                .WithMany()
+                .HasForeignKey(e => e.VpnPeerId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(e => e.TenantId);
+            entity.HasIndex(e => e.VpnPeerId);
         });
 
-        // Configuração de RouterWireGuardPeer
-        modelBuilder.Entity<RouterWireGuardPeer>(entity =>
+        // Configuração de VpnPeer (tabela vpn_peers; vínculo router/host via VpnPeerId)
+        modelBuilder.Entity<VpnPeer>(entity =>
         {
-            entity.ToTable("router_wireguard_peers");
+            entity.ToTable("vpn_peers");
 
             entity.HasKey(e => e.Id);
 
-            entity.Property(e => e.RouterId).IsRequired();
             entity.Property(e => e.VpnNetworkId).IsRequired();
 
             entity.Property(e => e.PublicKey)
@@ -406,20 +380,11 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
 
-            entity.HasOne(e => e.Router)
-                .WithMany(r => r.WireGuardPeers)
-                .HasForeignKey(e => e.RouterId)
-                .OnDelete(DeleteBehavior.Cascade);
-
             entity.HasOne(e => e.VpnNetwork)
                 .WithMany()
                 .HasForeignKey(e => e.VpnNetworkId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => new { e.RouterId, e.VpnNetworkId })
-                .IsUnique();
-
-            entity.HasIndex(e => e.RouterId);
             entity.HasIndex(e => e.VpnNetworkId);
         });
 
@@ -664,7 +629,6 @@ public class ApplicationDbContext : DbContext
                 .HasConversion<string>();
 
             entity.Property(e => e.VpnIp)
-                .IsRequired()
                 .HasMaxLength(255);
 
             entity.Property(e => e.SshPort)
@@ -677,12 +641,21 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.SshPassword)
                 .HasMaxLength(500);
 
+            entity.Property(e => e.SshPrivateKey);
+            entity.Property(e => e.SshPublicKey);
+
+            entity.Property(e => e.ProvisioningStatus)
+                .IsRequired()
+                .HasConversion<string>();
+
             entity.Property(e => e.Status)
                 .IsRequired()
                 .HasConversion<string>();
 
             entity.Property(e => e.Description)
                 .HasMaxLength(500);
+
+            entity.Property(e => e.MetricsJson);
 
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
@@ -697,7 +670,13 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.VpnNetworkId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasOne(e => e.VpnPeer)
+                .WithMany()
+                .HasForeignKey(e => e.VpnPeerId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(e => e.TenantId);
+            entity.HasIndex(e => e.VpnPeerId);
         });
     }
 }

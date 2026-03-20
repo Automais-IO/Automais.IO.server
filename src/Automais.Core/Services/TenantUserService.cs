@@ -224,7 +224,6 @@ public class TenantUserService : ITenantUserService
             return;
         }
 
-        await _vpnNetworkRepository.RemoveMembershipsByUserIdAsync(id, cancellationToken);
         await _userRepository.DeleteAsync(id, cancellationToken);
     }
 
@@ -358,48 +357,19 @@ public class TenantUserService : ITenantUserService
         return Convert.ToBase64String(hashedBytes);
     }
 
-    private async Task<TenantUserDto> BuildDtoAsync(TenantUser user, CancellationToken cancellationToken)
+    private Task<TenantUserDto> BuildDtoAsync(TenantUser user, CancellationToken cancellationToken)
     {
-        try
-        {
-            var memberships = await _vpnNetworkRepository.GetMembershipsByUserIdAsync(user.Id, cancellationToken);
-            var networkIds = memberships.Select(m => m.VpnNetworkId).Distinct().ToList();
-            var networks = networkIds.Count > 0
-                ? await _vpnNetworkRepository.GetByIdsAsync(networkIds, cancellationToken)
-                : Enumerable.Empty<VpnNetwork>();
-
-            return MapToDto(user, networks);
-        }
-        catch (Exception ex)
-        {
-            // Em caso de erro ao buscar networks, retorna DTO sem networks
-            System.Diagnostics.Debug.WriteLine($"Erro ao buscar networks para usuário {user.Id}: {ex.Message}");
-            return MapToDto(user, Enumerable.Empty<VpnNetwork>());
-        }
+        // Associação usuário↔rede via vpn_network_memberships foi removida; VPN de usuário usa rede padrão do tenant no provisionamento.
+        return Task.FromResult(MapToDto(user, Enumerable.Empty<VpnNetwork>()));
     }
 
-    private async Task SetUserNetworksAsync(TenantUser user, IEnumerable<Guid> networkIds, CancellationToken cancellationToken)
+    private static Task SetUserNetworksAsync(TenantUser user, IEnumerable<Guid> networkIds, CancellationToken cancellationToken)
     {
-        var ids = networkIds.Distinct().ToList();
-        if (ids.Count == 0)
-        {
-            await _vpnNetworkRepository.ReplaceUserMembershipsAsync(user.TenantId, user.Id, Array.Empty<Guid>(), cancellationToken);
-            return;
-        }
-
-        var networks = await _vpnNetworkRepository.GetByIdsAsync(ids, cancellationToken);
-        var missing = ids.Except(networks.Select(n => n.Id)).ToList();
-        if (missing.Any())
-        {
-            throw new KeyNotFoundException($"Rede(s) VPN não encontrada(s): {string.Join(", ", missing)}");
-        }
-
-        if (networks.Any(n => n.TenantId != user.TenantId))
-        {
-            throw new InvalidOperationException("Usuário não pode ser associado a redes de outro tenant.");
-        }
-
-        await _vpnNetworkRepository.ReplaceUserMembershipsAsync(user.TenantId, user.Id, ids, cancellationToken);
+        // vpn_network_memberships removido: networkIds na API são ignorados (compatibilidade).
+        _ = user;
+        _ = networkIds;
+        _ = cancellationToken;
+        return Task.CompletedTask;
     }
 
     private static TenantUserDto MapToDto(TenantUser user, IEnumerable<VpnNetwork> networks)

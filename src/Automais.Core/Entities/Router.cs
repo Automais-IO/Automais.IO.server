@@ -27,6 +27,9 @@ public class Router
     public bool AutomaisApiUserCreated { get; set; } = false;
     public Guid? VpnNetworkId { get; set; }
 
+    /// <summary>Peer WireGuard principal na tabela <c>vpn_peers</c> (opcional).</summary>
+    public Guid? VpnPeerId { get; set; }
+
     public RouterOsApiAuthStatus RouterOsApiAuthStatus { get; set; } = RouterOsApiAuthStatus.Unknown;
     public DateTime? RouterOsApiAuthCheckedAt { get; set; }
     public string? RouterOsApiAuthMessage { get; set; }
@@ -42,7 +45,7 @@ public class Router
 
     public Tenant Tenant { get; set; } = null!;
     public VpnNetwork? VpnNetwork { get; set; }
-    public ICollection<RouterWireGuardPeer> WireGuardPeers { get; set; } = new List<RouterWireGuardPeer>();
+    public VpnPeer? VpnPeer { get; set; }
     public ICollection<RouterConfigLog> ConfigLogs { get; set; } = new List<RouterConfigLog>();
     public ICollection<RouterBackup> Backups { get; set; } = new List<RouterBackup>();
     public ICollection<RouterStaticRoute> StaticRoutes { get; set; } = new List<RouterStaticRoute>();

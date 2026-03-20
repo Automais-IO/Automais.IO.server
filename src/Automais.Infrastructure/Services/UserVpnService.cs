@@ -7,8 +7,6 @@ using Automais.Core.DTOs;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
 using Microsoft.Extensions.Logging;
-using Microsoft.EntityFrameworkCore;
-
 namespace Automais.Infrastructure.Services;
 
 public class UserVpnService : IUserVpnService

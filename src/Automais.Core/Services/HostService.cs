@@ -17,19 +17,25 @@ public class HostService : IHostService
     private readonly IVpnIpAllocationService _ipAlloc;
     private readonly IVpnPeerRepository _peerRepo;
     private readonly IVpnNetworkRepository _vpnNetworkRepo;
+    private readonly IAllowedNetworkRepository _allowedNetworkRepository;
+    private readonly IStaticNetworkRepository _staticRouteRepository;
 
     public HostService(
         IHostRepository hostRepository,
         ITenantRepository tenantRepository,
         IVpnIpAllocationService ipAlloc,
         IVpnPeerRepository peerRepo,
-        IVpnNetworkRepository vpnNetworkRepo)
+        IVpnNetworkRepository vpnNetworkRepo,
+        IAllowedNetworkRepository allowedNetworkRepository,
+        IStaticNetworkRepository staticRouteRepository)
     {
         _hostRepository = hostRepository;
         _tenantRepository = tenantRepository;
         _ipAlloc = ipAlloc;
         _peerRepo = peerRepo;
         _vpnNetworkRepo = vpnNetworkRepo;
+        _allowedNetworkRepository = allowedNetworkRepository;
+        _staticRouteRepository = staticRouteRepository;
     }
 
     public async Task<IEnumerable<HostDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -219,16 +225,24 @@ public class HostService : IHostService
         host.UpdatedAt = DateTime.UtcNow;
         await _hostRepository.UpdateAsync(host, cancellationToken);
 
-        return BuildSetupScript(host, peer, vpnNetwork);
+        return await BuildSetupScriptAsync(host, peer, vpnNetwork, cancellationToken);
     }
 
-    private static string BuildSetupScript(Host host, VpnPeer peer, VpnNetwork vpnNetwork)
+    private async Task<string> BuildSetupScriptAsync(Host host, VpnPeer peer, VpnNetwork vpnNetwork, CancellationToken cancellationToken)
     {
         var addrPart = peer.PeerIp.Split(',')[0].Trim();
         var address = addrPart.Contains('/') ? addrPart : $"{addrPart}/32";
         var serverEndpoint = vpnNetwork.ServerEndpoint ?? "automais.io";
         var serverPublicKey = (vpnNetwork.ServerPublicKey ?? "").Trim();
         var listenPort = vpnNetwork.ListenPort > 0 ? vpnNetwork.ListenPort : 51820;
+
+        var allowedRows = await _allowedNetworkRepository.GetByVpnPeerIdAsync(peer.Id, cancellationToken);
+        var allowedIpsClient = VpnPeerRoutingHelper.ComposeClientAllowedIps(
+            vpnNetwork.Cidr,
+            allowedRows.Select(a => a.NetworkCidr),
+            peer.PeerIp);
+
+        var staticRoutes = await _staticRouteRepository.GetByVpnPeerIdAsync(peer.Id, cancellationToken);
         var sshPubKey = (host.SshPublicKey ?? "").Trim();
         var password = host.SshPassword ?? "";
 
@@ -284,6 +298,14 @@ public class HostService : IHostService
         sb.AppendLine("[Interface]");
         sb.AppendLine($"PrivateKey = {peer.PrivateKey}");
         sb.AppendLine($"Address = {address}");
+        foreach (var sn in staticRoutes)
+        {
+            if (string.IsNullOrWhiteSpace(sn.Destination))
+                continue;
+            var dst = sn.Destination.Trim();
+            sb.AppendLine($"PostUp = ip route add {dst} dev %i");
+            sb.AppendLine($"PostDown = ip route del {dst} dev %i || true");
+        }
         sb.AppendLine();
         sb.AppendLine("[Peer]");
         if (!string.IsNullOrEmpty(serverPublicKey))
@@ -291,7 +313,7 @@ public class HostService : IHostService
         else
             sb.AppendLine("# PublicKey = (servidor VPN ainda sem chave pública configurada)");
         sb.AppendLine($"Endpoint = {serverEndpoint}:{listenPort}");
-        sb.AppendLine($"AllowedIPs = {vpnNetwork.Cidr}");
+        sb.AppendLine($"AllowedIPs = {allowedIpsClient}");
         sb.AppendLine("PersistentKeepalive = 25");
         sb.AppendLine("WGEOF");
         sb.AppendLine("echo 'Configuração VPN gravada.'");
@@ -341,7 +363,11 @@ public class HostService : IHostService
             UpdatedAt = h.UpdatedAt,
             VpnPeerId = vpnPeerId,
             VpnPeerKeysConfigured = peer != null && !string.IsNullOrEmpty(peer.PublicKey) && !string.IsNullOrEmpty(peer.PrivateKey),
-            SetupRequestedAt = h.SetupRequestedAt
+            SetupRequestedAt = h.SetupRequestedAt,
+            VpnPeerPingAvgTimeMs = peer?.PingAvgTimeMs,
+            VpnPeerPingSuccess = peer?.PingSuccess,
+            VpnPeerPingPacketLoss = peer?.PingPacketLoss,
+            VpnPeerLastHandshake = peer?.LastHandshake
         };
     }
 
@@ -375,6 +401,10 @@ public class HostService : IHostService
             VpnPeerId = vpnPeerId,
             VpnPeerKeysConfigured = peer != null && !string.IsNullOrEmpty(peer.PublicKey) && !string.IsNullOrEmpty(peer.PrivateKey),
             SetupRequestedAt = h.SetupRequestedAt,
+            VpnPeerPingAvgTimeMs = peer?.PingAvgTimeMs,
+            VpnPeerPingSuccess = peer?.PingSuccess,
+            VpnPeerPingPacketLoss = peer?.PingPacketLoss,
+            VpnPeerLastHandshake = peer?.LastHandshake,
             SshPrivateKey = h.SshPrivateKey,
             SshPassword = h.SshPassword
         };

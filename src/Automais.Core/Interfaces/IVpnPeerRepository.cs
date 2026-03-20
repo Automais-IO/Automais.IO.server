@@ -9,6 +9,8 @@ public interface IVpnPeerRepository
     Task<VpnPeer?> GetByRouterIdAndNetworkIdAsync(Guid routerId, Guid vpnNetworkId, CancellationToken cancellationToken = default);
     Task<IEnumerable<VpnPeer>> GetByRouterIdAsync(Guid routerId, CancellationToken cancellationToken = default);
     Task<IEnumerable<VpnPeer>> GetByVpnNetworkIdAsync(Guid vpnNetworkId, CancellationToken cancellationToken = default);
+    /// <summary>Todos os peers das redes indicadas (servidor VPN / sync).</summary>
+    Task<IEnumerable<VpnPeer>> GetByVpnNetworkIdsAsync(IEnumerable<Guid> vpnNetworkIds, CancellationToken cancellationToken = default);
     Task<IEnumerable<VpnPeer>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<VpnPeer> CreateAsync(VpnPeer peer, CancellationToken cancellationToken = default);
     Task<VpnPeer> UpdateAsync(VpnPeer peer, CancellationToken cancellationToken = default);

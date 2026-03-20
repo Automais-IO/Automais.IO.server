@@ -1,7 +1,10 @@
 using Automais.Api.Extensions;
-using Automais.Core.DTOs;
+using Automais.Core.Entities;
 using Automais.Core.Interfaces;
+using Automais.Core.Services;
+using Automais.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Automais.Api.Controllers;
 
@@ -17,6 +20,7 @@ public class VpnServersController : ControllerBase
     private readonly IRouterRepository _routerRepository;
     private readonly IVpnPeerRepository _peerRepository;
     private readonly IHostRepository _hostRepository;
+    private readonly ApplicationDbContext _db;
     private readonly ILogger<VpnServersController> _logger;
     private readonly IConfiguration _configuration;
 
@@ -25,6 +29,7 @@ public class VpnServersController : ControllerBase
         IRouterRepository routerRepository,
         IVpnPeerRepository peerRepository,
         IHostRepository hostRepository,
+        ApplicationDbContext db,
         ILogger<VpnServersController> logger,
         IConfiguration configuration)
     {
@@ -32,6 +37,7 @@ public class VpnServersController : ControllerBase
         _routerRepository = routerRepository;
         _peerRepository = peerRepository;
         _hostRepository = hostRepository;
+        _db = db;
         _logger = logger;
         _configuration = configuration;
     }
@@ -55,10 +61,8 @@ public class VpnServersController : ControllerBase
         {
             _logger.LogInformation("Serviço VPN com endpoint '{Endpoint}' consultando seus recursos", endpoint);
 
-            // Buscar todas as VpnNetworks que têm este ServerEndpoint
             var allVpnNetworks = await _vpnNetworkRepository.GetAllAsync(cancellationToken);
-            
-            // Filtrar VpnNetworks pelo ServerEndpoint
+
             var vpnNetworks = allVpnNetworks
                 .Where(vpn => vpn.ServerEndpoint != null && vpn.ServerEndpoint.Equals(endpoint, StringComparison.OrdinalIgnoreCase))
                 .Select(vpn => new
@@ -77,36 +81,80 @@ public class VpnServersController : ControllerBase
 
             var vpnPortById = vpnNetworks.ToDictionary(v => v.id, v => v.listen_port);
 
-            // Buscar todos os Routers que pertencem às VpnNetworks deste servidor
             var vpnNetworkIds = vpnNetworks.Select(v => Guid.Parse(v.id)).ToList();
             var allRouters = await _routerRepository.GetAllAsync(cancellationToken);
-            
+
             var routerList = allRouters
                 .Where(r => r.VpnNetworkId.HasValue && vpnNetworkIds.Contains(r.VpnNetworkId.Value))
                 .ToList();
-            
-            // Buscar peers para cada router
+
+            var allPeersForNetworks = await _peerRepository.GetByVpnNetworkIdsAsync(vpnNetworkIds, cancellationToken);
+            var activePeerIds = allPeersForNetworks
+                .Where(p => p.IsEnabled && !string.IsNullOrEmpty(p.PublicKey) && !string.IsNullOrEmpty(p.PeerIp))
+                .Select(p => p.Id)
+                .ToList();
+
+            var allowedRows = await _db.AllowedNetworks.AsNoTracking()
+                .Where(n => activePeerIds.Contains(n.VpnPeerId))
+                .ToListAsync(cancellationToken);
+            var allowedByPeer = allowedRows
+                .GroupBy(n => n.VpnPeerId)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.NetworkCidr).ToList());
+
+            var remoteRows = await _db.RemoteNetworks.AsNoTracking()
+                .Where(n => activePeerIds.Contains(n.VpnPeerId))
+                .ToListAsync(cancellationToken);
+            var remoteByPeer = remoteRows
+                .GroupBy(n => n.VpnPeerId)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.NetworkCidr).ToList());
+
+            var staticRows = await _db.StaticNetworks.AsNoTracking()
+                .Where(s => activePeerIds.Contains(s.VpnPeerId))
+                .ToListAsync(cancellationToken);
+            var staticByPeer = staticRows
+                .GroupBy(s => s.VpnPeerId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             var routers = new List<object>();
             foreach (var router in routerList)
             {
                 var peers = await _peerRepository.GetByRouterIdAsync(router.Id, cancellationToken);
                 var peersList = peers
                     .Where(p => p.IsEnabled && !string.IsNullOrEmpty(p.PublicKey) && !string.IsNullOrEmpty(p.PeerIp))
-                    .Select(p => new
+                    .Select(p =>
                     {
-                        id = p.Id.ToString(),
-                        router_id = router.Id.ToString(),
-                        host_id = (string?)null,
-                        vpn_network_id = p.VpnNetworkId.ToString(),
-                        public_key = p.PublicKey,
-                        peer_ip = p.PeerIp,
-                        allowed_ips = p.PeerIp,
-                        endpoint = p.Endpoint,
-                        listen_port = vpnPortById.GetValueOrDefault(p.VpnNetworkId.ToString(), 51820),
-                        is_enabled = p.IsEnabled
+                        var allowedList = allowedByPeer.GetValueOrDefault(p.Id) ?? new List<string>();
+                        var remoteList = remoteByPeer.GetValueOrDefault(p.Id) ?? new List<string>();
+                        var staticList = staticByPeer.GetValueOrDefault(p.Id) ?? new List<StaticNetwork>();
+                        var staticDtos = staticList
+                            .Select(x => new
+                            {
+                                destination = x.Destination,
+                                gateway = x.Gateway,
+                                interface_name = x.Interface
+                            })
+                            .ToList();
+                        var tunnelPart = p.PeerIp.Split(',')[0].Trim();
+                        var allowedIpsWg = VpnPeerRoutingHelper.ComposeServerAllowedIps(p.PeerIp, remoteList);
+                        return new
+                        {
+                            id = p.Id.ToString(),
+                            router_id = router.Id.ToString(),
+                            host_id = (string?)null,
+                            vpn_network_id = p.VpnNetworkId.ToString(),
+                            public_key = p.PublicKey,
+                            peer_ip = tunnelPart,
+                            allowed_ips = allowedIpsWg,
+                            allowed_networks = allowedList,
+                            remote_networks = remoteList,
+                            static_networks = staticDtos,
+                            endpoint = p.Endpoint,
+                            listen_port = vpnPortById.GetValueOrDefault(p.VpnNetworkId.ToString(), 51820),
+                            is_enabled = p.IsEnabled
+                        };
                     })
                     .ToList();
-                
+
                 routers.Add(new
                 {
                     id = router.Id.ToString(),
@@ -127,6 +175,21 @@ public class VpnServersController : ControllerBase
                 var hp = await _peerRepository.GetByIdAsync(host.VpnPeerId.Value, cancellationToken);
                 if (hp == null || !hp.IsEnabled || string.IsNullOrEmpty(hp.PublicKey) || string.IsNullOrEmpty(hp.PeerIp))
                     continue;
+
+                var allowedListH = allowedByPeer.GetValueOrDefault(hp.Id) ?? new List<string>();
+                var remoteListH = remoteByPeer.GetValueOrDefault(hp.Id) ?? new List<string>();
+                var staticListH = staticByPeer.GetValueOrDefault(hp.Id) ?? new List<StaticNetwork>();
+                var staticDtosH = staticListH
+                    .Select(x => new
+                    {
+                        destination = x.Destination,
+                        gateway = x.Gateway,
+                        interface_name = x.Interface
+                    })
+                    .ToList();
+                var tunnelPartH = hp.PeerIp.Split(',')[0].Trim();
+                var allowedIpsWgH = VpnPeerRoutingHelper.ComposeServerAllowedIps(hp.PeerIp, remoteListH);
+
                 hostsPayload.Add(new
                 {
                     id = host.Id.ToString(),
@@ -141,8 +204,11 @@ public class VpnServersController : ControllerBase
                             host_id = host.Id.ToString(),
                             vpn_network_id = hp.VpnNetworkId.ToString(),
                             public_key = hp.PublicKey,
-                            peer_ip = hp.PeerIp,
-                            allowed_ips = hp.PeerIp,
+                            peer_ip = tunnelPartH,
+                            allowed_ips = allowedIpsWgH,
+                            allowed_networks = allowedListH,
+                            remote_networks = remoteListH,
+                            static_networks = staticDtosH,
                             endpoint = hp.Endpoint,
                             listen_port = vpnPortById.GetValueOrDefault(hp.VpnNetworkId.ToString(), 51820),
                             is_enabled = hp.IsEnabled
@@ -151,14 +217,83 @@ public class VpnServersController : ControllerBase
                 });
             }
 
+            var routerByPeerId = routerList
+                .Where(r => r.VpnPeerId.HasValue)
+                .ToDictionary(r => r.VpnPeerId!.Value, r => r);
+            var hostByPeerId = hostsManaged
+                .Where(h => h.VpnPeerId.HasValue)
+                .ToDictionary(h => h.VpnPeerId!.Value, h => h);
+
+            var vpnPeersFlat = new List<object>();
+            foreach (var p in allPeersForNetworks)
+            {
+                if (!p.IsEnabled || string.IsNullOrWhiteSpace(p.PublicKey) || string.IsNullOrWhiteSpace(p.PeerIp))
+                    continue;
+
+                string? rid = null;
+                string? hid = null;
+                string? rname = null;
+                string? hname = null;
+                string? hostProvisioning = null;
+
+                if (routerByPeerId.TryGetValue(p.Id, out var rt))
+                {
+                    rid = rt.Id.ToString();
+                    rname = rt.Name;
+                }
+
+                if (hostByPeerId.TryGetValue(p.Id, out var ht))
+                {
+                    hid = ht.Id.ToString();
+                    hname = ht.Name;
+                    hostProvisioning = ht.ProvisioningStatus.ToString();
+                }
+
+                var resName = !string.IsNullOrEmpty(hname) ? hname : (!string.IsNullOrEmpty(rname) ? rname : "unknown");
+
+                var allowedList = allowedByPeer.GetValueOrDefault(p.Id) ?? new List<string>();
+                var remoteList = remoteByPeer.GetValueOrDefault(p.Id) ?? new List<string>();
+                var staticList = staticByPeer.GetValueOrDefault(p.Id) ?? new List<StaticNetwork>();
+                var staticDtos = staticList
+                    .Select(x => new
+                    {
+                        destination = x.Destination,
+                        gateway = x.Gateway,
+                        interface_name = x.Interface
+                    })
+                    .ToList();
+                var tunnelPart = p.PeerIp.Split(',')[0].Trim();
+                var allowedIpsWg = VpnPeerRoutingHelper.ComposeServerAllowedIps(p.PeerIp, remoteList);
+
+                vpnPeersFlat.Add(new
+                {
+                    id = p.Id.ToString(),
+                    vpn_network_id = p.VpnNetworkId.ToString(),
+                    public_key = p.PublicKey,
+                    peer_ip = tunnelPart,
+                    allowed_ips = allowedIpsWg,
+                    allowed_networks = allowedList,
+                    remote_networks = remoteList,
+                    static_networks = staticDtos,
+                    endpoint = p.Endpoint,
+                    listen_port = vpnPortById.GetValueOrDefault(p.VpnNetworkId.ToString(), 51820),
+                    is_enabled = p.IsEnabled,
+                    router_id = rid,
+                    host_id = hid,
+                    resource_name = resName,
+                    host_provisioning_status = hostProvisioning
+                });
+            }
+
             _logger.LogInformation(
-                "Servidor VPN com endpoint '{Endpoint}' gerencia {VpnCount} VPNs, {RouterCount} Routers e {HostCount} Hosts",
-                endpoint, vpnNetworks.Count, routers.Count, hostsPayload.Count);
+                "Servidor VPN com endpoint '{Endpoint}' gerencia {VpnCount} VPNs, {RouterCount} Routers, {HostCount} Hosts, {PeerCount} vpn_peers",
+                endpoint, vpnNetworks.Count, routers.Count, hostsPayload.Count, vpnPeersFlat.Count);
 
             return Ok(new
             {
                 endpoint = endpoint,
                 vpn_networks = vpnNetworks,
+                vpn_peers = vpnPeersFlat,
                 routers = routers,
                 hosts = hostsPayload,
                 timestamp = DateTime.UtcNow
@@ -183,9 +318,8 @@ public class VpnServersController : ControllerBase
     {
         try
         {
-            // Verificar se existem VpnNetworks com este endpoint
             var allVpnNetworks = await _vpnNetworkRepository.GetAllAsync(cancellationToken);
-            var hasNetworks = allVpnNetworks.Any(vpn => 
+            var hasNetworks = allVpnNetworks.Any(vpn =>
                 vpn.ServerEndpoint != null && vpn.ServerEndpoint.Equals(endpoint, StringComparison.OrdinalIgnoreCase));
 
             if (!hasNetworks)
@@ -211,4 +345,3 @@ public class VpnServersController : ControllerBase
         }
     }
 }
-

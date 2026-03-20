@@ -48,7 +48,6 @@ public class Router
     public VpnPeer? VpnPeer { get; set; }
     public ICollection<RouterConfigLog> ConfigLogs { get; set; } = new List<RouterConfigLog>();
     public ICollection<RouterBackup> Backups { get; set; } = new List<RouterBackup>();
-    public ICollection<RouterStaticRoute> StaticRoutes { get; set; } = new List<RouterStaticRoute>();
 }
 
 public enum RouterStatus

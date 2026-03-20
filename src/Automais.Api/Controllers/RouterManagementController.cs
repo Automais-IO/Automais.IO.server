@@ -58,8 +58,8 @@ public class RouterManagementController : ControllerBase
     public ActionResult<object> GetNatRules(Guid routerId) =>
         StatusCode(501, new { message = DEPRECATED_MESSAGE });
 
-    [HttpGet("routes")]
-    public ActionResult<object> GetRoutes(Guid routerId) =>
+    [HttpGet("static-networks")]
+    public ActionResult<object> GetStaticNetworks(Guid routerId) =>
         StatusCode(501, new { message = DEPRECATED_MESSAGE });
 
     [HttpGet("interfaces")]

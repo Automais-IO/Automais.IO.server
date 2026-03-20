@@ -21,8 +21,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<VpnNetwork> VpnNetworks => Set<VpnNetwork>();
     public DbSet<Router> Routers => Set<Router>();
     public DbSet<VpnPeer> VpnPeers => Set<VpnPeer>();
-    public DbSet<RouterAllowedNetwork> RouterAllowedNetworks => Set<RouterAllowedNetwork>();
-    public DbSet<RouterStaticRoute> RouterStaticRoutes => Set<RouterStaticRoute>();
+    public DbSet<AllowedNetwork> AllowedNetworks => Set<AllowedNetwork>();
+    public DbSet<RemoteNetwork> RemoteNetworks => Set<RemoteNetwork>();
+    public DbSet<StaticNetwork> StaticNetworks => Set<StaticNetwork>();
     public DbSet<UserAllowedRoute> UserAllowedRoutes => Set<UserAllowedRoute>();
     public DbSet<RouterConfigLog> RouterConfigLogs => Set<RouterConfigLog>();
     public DbSet<RouterBackup> RouterBackups => Set<RouterBackup>();
@@ -388,14 +389,14 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.VpnNetworkId);
         });
 
-        // Configuração de RouterAllowedNetwork
-        modelBuilder.Entity<RouterAllowedNetwork>(entity =>
+        // Configuração de AllowedNetwork (por peer VPN)
+        modelBuilder.Entity<AllowedNetwork>(entity =>
         {
-            entity.ToTable("router_allowed_networks");
+            entity.ToTable("allowed_networks");
 
             entity.HasKey(e => e.Id);
 
-            entity.Property(e => e.RouterId).IsRequired();
+            entity.Property(e => e.VpnPeerId).IsRequired();
             entity.Property(e => e.NetworkCidr)
                 .IsRequired()
                 .HasMaxLength(50);
@@ -405,25 +406,53 @@ public class ApplicationDbContext : DbContext
 
             entity.Property(e => e.CreatedAt).IsRequired();
 
-            entity.HasOne(e => e.Router)
-                .WithMany()
-                .HasForeignKey(e => e.RouterId)
+            entity.HasOne(e => e.VpnPeer)
+                .WithMany(p => p.AllowedNetworks)
+                .HasForeignKey(e => e.VpnPeerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => new { e.RouterId, e.NetworkCidr })
+            entity.HasIndex(e => new { e.VpnPeerId, e.NetworkCidr })
                 .IsUnique();
 
-            entity.HasIndex(e => e.RouterId);
+            entity.HasIndex(e => e.VpnPeerId);
         });
 
-        // Configuração de RouterStaticRoute
-        modelBuilder.Entity<RouterStaticRoute>(entity =>
+        // Configuração de RemoteNetwork (LAN por trás do peer)
+        modelBuilder.Entity<RemoteNetwork>(entity =>
         {
-            entity.ToTable("router_static_routes");
+            entity.ToTable("remote_networks");
 
             entity.HasKey(e => e.Id);
 
-            entity.Property(e => e.RouterId).IsRequired();
+            entity.Property(e => e.VpnPeerId).IsRequired();
+            entity.Property(e => e.NetworkCidr)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            entity.Property(e => e.Description)
+                .HasMaxLength(255);
+
+            entity.Property(e => e.CreatedAt).IsRequired();
+
+            entity.HasOne(e => e.VpnPeer)
+                .WithMany(p => p.RemoteNetworks)
+                .HasForeignKey(e => e.VpnPeerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.VpnPeerId, e.NetworkCidr })
+                .IsUnique();
+
+            entity.HasIndex(e => e.VpnPeerId);
+        });
+
+        // Configuração de StaticNetwork (rotas no peer / RouterOS)
+        modelBuilder.Entity<StaticNetwork>(entity =>
+        {
+            entity.ToTable("static_networks");
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.VpnPeerId).IsRequired();
             entity.Property(e => e.Destination)
                 .IsRequired()
                 .HasMaxLength(50);
@@ -458,15 +487,15 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
 
-            entity.HasOne(e => e.Router)
-                .WithMany(r => r.StaticRoutes)
-                .HasForeignKey(e => e.RouterId)
+            entity.HasOne(e => e.VpnPeer)
+                .WithMany(p => p.StaticNetworks)
+                .HasForeignKey(e => e.VpnPeerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => new { e.RouterId, e.Destination })
+            entity.HasIndex(e => new { e.VpnPeerId, e.Destination })
                 .IsUnique();
 
-            entity.HasIndex(e => e.RouterId);
+            entity.HasIndex(e => e.VpnPeerId);
         });
 
         // Configuração de UserAllowedRoute
@@ -478,7 +507,7 @@ public class ApplicationDbContext : DbContext
 
             entity.Property(e => e.UserId).IsRequired();
             entity.Property(e => e.RouterId).IsRequired();
-            entity.Property(e => e.RouterAllowedNetworkId).IsRequired();
+            entity.Property(e => e.AllowedNetworkId).IsRequired();
             entity.Property(e => e.NetworkCidr)
                 .IsRequired()
                 .HasMaxLength(50);
@@ -499,12 +528,12 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.RouterId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(e => e.RouterAllowedNetwork)
+            entity.HasOne(e => e.AllowedNetwork)
                 .WithMany()
-                .HasForeignKey(e => e.RouterAllowedNetworkId)
+                .HasForeignKey(e => e.AllowedNetworkId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(e => new { e.UserId, e.RouterAllowedNetworkId })
+            entity.HasIndex(e => new { e.UserId, e.AllowedNetworkId })
                 .IsUnique();
 
             entity.HasIndex(e => e.UserId);

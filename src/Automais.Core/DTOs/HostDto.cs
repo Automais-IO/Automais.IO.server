@@ -28,6 +28,12 @@ public class HostDto
 
     /// <summary>Timestamp de quando o setup foi solicitado (para controle de expiração).</summary>
     public DateTime? SetupRequestedAt { get; set; }
+
+    /// <summary>Estatísticas do peer VPN (<c>vpn_peers</c>) — atualizadas pelo serviço vpnserver.</summary>
+    public double? VpnPeerPingAvgTimeMs { get; set; }
+    public bool? VpnPeerPingSuccess { get; set; }
+    public double? VpnPeerPingPacketLoss { get; set; }
+    public DateTime? VpnPeerLastHandshake { get; set; }
 }
 
 public class CreateHostDto

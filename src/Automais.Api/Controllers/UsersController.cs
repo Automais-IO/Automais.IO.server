@@ -11,18 +11,21 @@ public class UsersController : ControllerBase
 {
     private readonly ITenantUserService _tenantUserService;
     private readonly IUserAllowedRouteRepository _userAllowedRouteRepository;
-    private readonly IRouterAllowedNetworkRepository _routerAllowedNetworkRepository;
+    private readonly IAllowedNetworkRepository _allowedNetworkRepository;
+    private readonly IRouterRepository _routerRepository;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(
         ITenantUserService tenantUserService,
         IUserAllowedRouteRepository userAllowedRouteRepository,
-        IRouterAllowedNetworkRepository routerAllowedNetworkRepository,
+        IAllowedNetworkRepository allowedNetworkRepository,
+        IRouterRepository routerRepository,
         ILogger<UsersController> logger)
     {
         _tenantUserService = tenantUserService;
         _userAllowedRouteRepository = userAllowedRouteRepository;
-        _routerAllowedNetworkRepository = routerAllowedNetworkRepository;
+        _allowedNetworkRepository = allowedNetworkRepository;
+        _routerRepository = routerRepository;
         _logger = logger;
     }
 
@@ -147,80 +150,92 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Obtém todas as rotas disponíveis de todos os routers do tenant
+    /// Catálogo de redes permitidas (por peer) dos routers do tenant — para atribuição ao usuário VPN.
     /// </summary>
-    [HttpGet("tenants/{tenantId:guid}/routes")]
-    public async Task<ActionResult<IEnumerable<RouterRouteDto>>> GetAvailableRoutes(Guid tenantId, CancellationToken cancellationToken)
+    [HttpGet("tenants/{tenantId:guid}/allowed-networks-for-users")]
+    public async Task<ActionResult<IEnumerable<AllowedNetworkForUserDto>>> GetAllowedNetworksForUsersCatalog(
+        Guid tenantId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            // Buscar todos os routers do tenant e suas redes destino
-            var routers = await _routerAllowedNetworkRepository.GetAllByTenantIdAsync(tenantId, cancellationToken);
-            
-            var routes = routers.Select(r => new RouterRouteDto
+            var networks = await _allowedNetworkRepository.GetAllByTenantIdAsync(tenantId, cancellationToken);
+            var routers = await _routerRepository.GetByTenantIdAsync(tenantId, cancellationToken);
+            var routerByPeer = routers.Where(x => x.VpnPeerId != null).ToDictionary(x => x.VpnPeerId!.Value);
+
+            var list = networks.Select(n =>
             {
-                RouterAllowedNetworkId = r.Id,
+                routerByPeer.TryGetValue(n.VpnPeerId, out var rt);
+                return new AllowedNetworkForUserDto
+                {
+                    AllowedNetworkId = n.Id,
+                    RouterId = rt?.Id ?? Guid.Empty,
+                    RouterName = rt?.Name ?? "Unknown",
+                    NetworkCidr = n.NetworkCidr,
+                    Description = n.Description
+                };
+            }).ToList();
+
+            return Ok(list);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao listar redes permitidas do tenant {TenantId}", tenantId);
+            return StatusCode(500, new { message = "Erro interno do servidor", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Redes permitidas atribuídas ao usuário (VPN).
+    /// </summary>
+    [HttpGet("users/{id:guid}/allowed-networks")]
+    public async Task<ActionResult<IEnumerable<AllowedNetworkForUserDto>>> GetUserAllowedNetworks(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var rows = await _userAllowedRouteRepository.GetByUserIdAsync(id, cancellationToken);
+            var dto = rows.Select(r => new AllowedNetworkForUserDto
+            {
+                AllowedNetworkId = r.AllowedNetworkId,
                 RouterId = r.RouterId,
                 RouterName = r.Router?.Name ?? "Unknown",
                 NetworkCidr = r.NetworkCidr,
                 Description = r.Description
             }).ToList();
 
-            return Ok(routes);
+            return Ok(dto);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao listar rotas disponíveis do tenant {TenantId}", tenantId);
+            _logger.LogError(ex, "Erro ao listar redes permitidas do usuário {UserId}", id);
             return StatusCode(500, new { message = "Erro interno do servidor", error = ex.Message });
         }
     }
 
     /// <summary>
-    /// Obtém rotas permitidas de um usuário
+    /// Atualiza quais redes permitidas o usuário pode usar na VPN.
     /// </summary>
-    [HttpGet("users/{id:guid}/routes")]
-    public async Task<ActionResult<IEnumerable<RouterRouteDto>>> GetUserRoutes(Guid id, CancellationToken cancellationToken)
+    [HttpPut("users/{id:guid}/allowed-networks")]
+    public async Task<IActionResult> UpdateUserAllowedNetworks(
+        Guid id,
+        [FromBody] UpdateUserAllowedNetworksDto dto,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var routes = await _userAllowedRouteRepository.GetByUserIdAsync(id, cancellationToken);
-            var routesDto = routes.Select(r => new RouterRouteDto
-            {
-                RouterAllowedNetworkId = r.RouterAllowedNetworkId,
-                RouterId = r.RouterId,
-                RouterName = r.Router?.Name ?? "Unknown",
-                NetworkCidr = r.NetworkCidr,
-                Description = r.Description
-            }).ToList();
-
-            return Ok(routesDto);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Erro ao listar rotas do usuário {UserId}", id);
-            return StatusCode(500, new { message = "Erro interno do servidor", error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Atualiza rotas permitidas de um usuário
-    /// </summary>
-    [HttpPut("users/{id:guid}/routes")]
-    public async Task<IActionResult> UpdateUserRoutes(Guid id, [FromBody] UpdateUserRoutesDto dto, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _userAllowedRouteRepository.ReplaceUserRoutesAsync(id, dto.RouterAllowedNetworkIds, cancellationToken);
+            await _userAllowedRouteRepository.ReplaceUserRoutesAsync(id, dto.AllowedNetworkIds, cancellationToken);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Erro ao atualizar rotas do usuário {UserId}", id);
+            _logger.LogWarning(ex, "Erro ao atualizar redes permitidas do usuário {UserId}", id);
             return NotFound(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao atualizar rotas do usuário {UserId}", id);
+            _logger.LogError(ex, "Erro ao atualizar redes permitidas do usuário {UserId}", id);
             return StatusCode(500, new { message = "Erro interno do servidor", error = ex.Message });
         }
     }

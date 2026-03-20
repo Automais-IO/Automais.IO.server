@@ -259,8 +259,9 @@ builder.Services.AddScoped<IDeviceRepository, DeviceRepository>();
 builder.Services.AddScoped<IVpnNetworkRepository, VpnNetworkRepository>();
 builder.Services.AddScoped<IRouterRepository, RouterRepository>();
 builder.Services.AddScoped<IVpnPeerRepository, VpnPeerRepository>();
-builder.Services.AddScoped<IRouterAllowedNetworkRepository, RouterAllowedNetworkRepository>();
-builder.Services.AddScoped<IRouterStaticRouteRepository, Automais.Infrastructure.Repositories.RouterStaticRouteRepository>();
+builder.Services.AddScoped<IAllowedNetworkRepository, AllowedNetworkRepository>();
+builder.Services.AddScoped<IRemoteNetworkRepository, RemoteNetworkRepository>();
+builder.Services.AddScoped<IStaticNetworkRepository, StaticNetworkRepository>();
 builder.Services.AddScoped<IUserAllowedRouteRepository, Automais.Infrastructure.Repositories.UserAllowedRouteRepository>();
 builder.Services.AddScoped<IRouterConfigLogRepository, RouterConfigLogRepository>();
 builder.Services.AddScoped<IRouterBackupRepository, RouterBackupRepository>();
@@ -341,8 +342,10 @@ builder.Services.AddScoped<IVpnPeerService>(sp =>
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
     var vpnNetworkRepo = sp.GetRequiredService<IVpnNetworkRepository>();
     var vpnServiceClient = sp.GetRequiredService<Automais.Core.Interfaces.IVpnServiceClient>();
+    var allowedRepo = sp.GetRequiredService<IAllowedNetworkRepository>();
+    var remoteRepo = sp.GetRequiredService<IRemoteNetworkRepository>();
     var logger = sp.GetService<ILogger<Automais.Core.Services.VpnPeerService>>();
-    return new Automais.Core.Services.VpnPeerService(peerRepo, routerRepo, vpnNetworkRepo, vpnServiceClient, logger);
+    return new Automais.Core.Services.VpnPeerService(peerRepo, routerRepo, vpnNetworkRepo, vpnServiceClient, allowedRepo, remoteRepo, logger);
 });
 
 builder.Services.AddScoped<IVpnNetworkService>(sp =>
@@ -363,7 +366,7 @@ builder.Services.AddScoped<IRouterService>(sp =>
 {
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
     var tenantRepo = sp.GetRequiredService<ITenantRepository>();
-    var allowedNetworkRepo = sp.GetService<IRouterAllowedNetworkRepository>();
+    var allowedNetworkRepo = sp.GetService<IAllowedNetworkRepository>();
     var vpnPeerService = sp.GetService<IVpnPeerService>(); // Opcional
     var vpnNetworkRepo = sp.GetService<IVpnNetworkRepository>(); // Opcional
     var logger = sp.GetService<ILogger<Automais.Core.Services.RouterService>>();
@@ -371,23 +374,28 @@ builder.Services.AddScoped<IRouterService>(sp =>
     return new Automais.Core.Services.RouterService(routerRepo, tenantRepo, allowedNetworkRepo, vpnPeerService, vpnNetworkRepo, peerRepo, logger);
 });
 
-// Registrar RouterStaticRouteService
-builder.Services.AddScoped<IRouterStaticRouteService>(sp =>
+builder.Services.AddScoped<IStaticNetworkService>(sp =>
 {
-    var routeRepo = sp.GetRequiredService<IRouterStaticRouteRepository>();
+    var routeRepo = sp.GetRequiredService<IStaticNetworkRepository>();
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
-    var logger = sp.GetService<ILogger<Automais.Core.Services.RouterStaticRouteService>>();
-    return new Automais.Core.Services.RouterStaticRouteService(routeRepo, routerRepo, logger);
+    var logger = sp.GetService<ILogger<Automais.Core.Services.StaticNetworkService>>();
+    return new Automais.Core.Services.StaticNetworkService(routeRepo, routerRepo, logger);
 });
 
-// Registrar RouterAllowedNetworkService (redes destino)
-builder.Services.AddScoped<IRouterAllowedNetworkService>(sp =>
+builder.Services.AddScoped<IAllowedNetworkService>(sp =>
 {
-    var allowedRepo = sp.GetRequiredService<IRouterAllowedNetworkRepository>();
+    var allowedRepo = sp.GetRequiredService<IAllowedNetworkRepository>();
     var routerRepo = sp.GetRequiredService<IRouterRepository>();
-    var peerRepo = sp.GetRequiredService<IVpnPeerRepository>();
-    var logger = sp.GetService<ILogger<Automais.Core.Services.RouterAllowedNetworkService>>();
-    return new Automais.Core.Services.RouterAllowedNetworkService(allowedRepo, routerRepo, peerRepo, logger);
+    var logger = sp.GetService<ILogger<Automais.Core.Services.AllowedNetworkService>>();
+    return new Automais.Core.Services.AllowedNetworkService(allowedRepo, routerRepo, logger);
+});
+
+builder.Services.AddScoped<IRemoteNetworkService>(sp =>
+{
+    var repo = sp.GetRequiredService<IRemoteNetworkRepository>();
+    var routerRepo = sp.GetRequiredService<IRouterRepository>();
+    var logger = sp.GetService<ILogger<RemoteNetworkService>>();
+    return new RemoteNetworkService(repo, routerRepo, logger);
 });
 
 builder.Services.AddScoped<IAuthService, Automais.Infrastructure.Services.AuthService>();

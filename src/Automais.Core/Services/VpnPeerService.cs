@@ -22,6 +22,8 @@ public class VpnPeerService : IVpnPeerService
     private readonly IRouterRepository _routerRepository;
     private readonly IVpnNetworkRepository _vpnNetworkRepository;
     private readonly IVpnServiceClient _vpnServiceClient;
+    private readonly IAllowedNetworkRepository _allowedNetworkRepository;
+    private readonly IRemoteNetworkRepository _remoteNetworkRepository;
     private readonly ILogger<VpnPeerService>? _logger;
 
     public VpnPeerService(
@@ -29,12 +31,16 @@ public class VpnPeerService : IVpnPeerService
         IRouterRepository routerRepository,
         IVpnNetworkRepository vpnNetworkRepository,
         IVpnServiceClient vpnServiceClient,
+        IAllowedNetworkRepository allowedNetworkRepository,
+        IRemoteNetworkRepository remoteNetworkRepository,
         ILogger<VpnPeerService>? logger = null)
     {
         _peerRepository = peerRepository;
         _routerRepository = routerRepository;
         _vpnNetworkRepository = vpnNetworkRepository;
         _vpnServiceClient = vpnServiceClient;
+        _allowedNetworkRepository = allowedNetworkRepository;
+        _remoteNetworkRepository = remoteNetworkRepository;
         _logger = logger;
     }
 
@@ -250,7 +256,7 @@ public class VpnPeerService : IVpnPeerService
 
         if (routerForPeer == null)
         {
-            var hostConfig = GenerateHostVpnClientConfig(peer, vpnNetwork);
+            var hostConfig = await GenerateHostVpnClientConfigAsync(peer, vpnNetwork, cancellationToken);
             return new VpnPeerConfigDto
             {
                 ConfigContent = hostConfig,
@@ -258,7 +264,7 @@ public class VpnPeerService : IVpnPeerService
             };
         }
 
-        var configContent = GenerateRouterConfig(routerForPeer, peer, vpnNetwork);
+        var configContent = await GenerateRouterConfigAsync(routerForPeer, peer, vpnNetwork, cancellationToken);
         var fileNameForConfig = SanitizeFileName(routerForPeer.Name);
         if (!fileNameForConfig.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
             fileNameForConfig = $"{fileNameForConfig}.conf";
@@ -509,7 +515,7 @@ public class VpnPeerService : IVpnPeerService
     }
 
     /// <summary>Config .conf para host Linux (peer referenciado só por <see cref="Host.VpnPeerId"/>).</summary>
-    private static string GenerateHostVpnClientConfig(VpnPeer peer, VpnNetwork vpnNetwork)
+    private async Task<string> GenerateHostVpnClientConfigAsync(VpnPeer peer, VpnNetwork vpnNetwork, CancellationToken cancellationToken)
     {
         var addrPart = peer.PeerIp.Split(',')[0].Trim();
         var addressLine = addrPart.Contains('/') ? addrPart : $"{addrPart}/32";
@@ -517,6 +523,12 @@ public class VpnPeerService : IVpnPeerService
         var serverEndpoint = vpnNetwork.ServerEndpoint ?? "automais.io";
         var serverPublicKey = (vpnNetwork.ServerPublicKey ?? "").Trim();
         var listenPort = vpnNetwork.ListenPort > 0 ? vpnNetwork.ListenPort : 51820;
+
+        var allowedRows = await _allowedNetworkRepository.GetByVpnPeerIdAsync(peer.Id, cancellationToken);
+        var allowedIps = VpnPeerRoutingHelper.ComposeClientAllowedIps(
+            vpnNetwork.Cidr,
+            allowedRows.Select(a => a.NetworkCidr),
+            peer.PeerIp);
 
         var lines = new List<string>
         {
@@ -533,7 +545,7 @@ public class VpnPeerService : IVpnPeerService
             lines.Add("# PublicKey do servidor — preencha após consultar o servidor VPN");
         lines.Add($"PublicKey = {serverPublicKey}");
         lines.Add($"Endpoint = {serverEndpoint}:{listenPort}");
-        lines.Add($"AllowedIPs = {vpnNetwork.Cidr}");
+        lines.Add($"AllowedIPs = {allowedIps}");
         lines.Add("PersistentKeepalive = 25");
         return string.Join("\n", lines);
     }
@@ -541,7 +553,7 @@ public class VpnPeerService : IVpnPeerService
     /// <summary>
     /// Gera o conteúdo do arquivo de configuração do cliente VPN (.conf) para o router
     /// </summary>
-    private static string GenerateRouterConfig(Router router, VpnPeer peer, VpnNetwork vpnNetwork)
+    private async Task<string> GenerateRouterConfigAsync(Router router, VpnPeer peer, VpnNetwork vpnNetwork, CancellationToken cancellationToken)
     {
         // Extrair IP do router (primeiro elemento do PeerIp)
         var routerIpWithPrefix = peer.PeerIp.Split(',')[0].Trim();
@@ -585,12 +597,13 @@ public class VpnPeerService : IVpnPeerService
         configLines.Add($"PublicKey = {serverPublicKey}");
         configLines.Add($"Endpoint = {serverEndpoint}:{listenPort}");
 
-        var peerIpParts = peer.PeerIp.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var allowedNetworks = new List<string> { vpnNetwork.Cidr };
-        if (peerIpParts.Length > 1)
-            allowedNetworks.AddRange(peerIpParts.Skip(1));
-        
-        configLines.Add($"AllowedIPs = {string.Join(", ", allowedNetworks)}");
+        var allowedRows = await _allowedNetworkRepository.GetByVpnPeerIdAsync(peer.Id, cancellationToken);
+        var allowedIpsClient = VpnPeerRoutingHelper.ComposeClientAllowedIps(
+            vpnNetwork.Cidr,
+            allowedRows.Select(a => a.NetworkCidr),
+            peer.PeerIp);
+
+        configLines.Add($"AllowedIPs = {allowedIpsClient}");
         configLines.Add("PersistentKeepalive = 25");
 
         return string.Join("\n", configLines);

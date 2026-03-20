@@ -130,7 +130,7 @@ public class RouterOsServiceClient : IRouterOsServiceClient
 
     public async Task<(bool Success, string? GatewayUsed)> AddRouteAsync(
         Guid routerId,
-        RouterStaticRouteDto route,
+        StaticNetworkDto route,
         CancellationToken cancellationToken = default)
     {
         var request = new

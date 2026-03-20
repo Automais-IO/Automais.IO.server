@@ -18,7 +18,7 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
     {
         return await _context.Set<UserAllowedRoute>()
             .Include(r => r.Router)
-            .Include(r => r.RouterAllowedNetwork)
+            .Include(r => r.AllowedNetwork)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
@@ -26,7 +26,7 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
     {
         return await _context.Set<UserAllowedRoute>()
             .Include(r => r.Router)
-            .Include(r => r.RouterAllowedNetwork)
+            .Include(r => r.AllowedNetwork)
             .Where(r => r.UserId == userId)
             .ToListAsync(cancellationToken);
     }
@@ -35,18 +35,20 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
     {
         return await _context.Set<UserAllowedRoute>()
             .Include(r => r.Router)
-            .Include(r => r.RouterAllowedNetwork)
+            .Include(r => r.AllowedNetwork)
             .Where(r => r.RouterId == routerId)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<UserAllowedRoute?> GetByUserIdAndRouterAllowedNetworkIdAsync(
-        Guid userId, 
-        Guid routerAllowedNetworkId, 
+    public async Task<UserAllowedRoute?> GetByUserIdAndAllowedNetworkIdAsync(
+        Guid userId,
+        Guid allowedNetworkId,
         CancellationToken cancellationToken = default)
     {
         return await _context.Set<UserAllowedRoute>()
-            .FirstOrDefaultAsync(r => r.UserId == userId && r.RouterAllowedNetworkId == routerAllowedNetworkId, cancellationToken);
+            .FirstOrDefaultAsync(
+                r => r.UserId == userId && r.AllowedNetworkId == allowedNetworkId,
+                cancellationToken);
     }
 
     public async Task<UserAllowedRoute> CreateAsync(UserAllowedRoute route, CancellationToken cancellationToken = default)
@@ -78,7 +80,7 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
         var routes = await _context.Set<UserAllowedRoute>()
             .Where(r => r.UserId == userId)
             .ToListAsync(cancellationToken);
-        
+
         if (routes.Any())
         {
             _context.Set<UserAllowedRoute>().RemoveRange(routes);
@@ -86,43 +88,47 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
         }
     }
 
-    public async Task ReplaceUserRoutesAsync(Guid userId, IEnumerable<Guid> routerAllowedNetworkIds, CancellationToken cancellationToken = default)
+    public async Task ReplaceUserRoutesAsync(Guid userId, IEnumerable<Guid> allowedNetworkIds, CancellationToken cancellationToken = default)
     {
-        var networkIds = routerAllowedNetworkIds.Distinct().ToList();
-        
-        // Remover rotas existentes
+        var networkIds = allowedNetworkIds.Distinct().ToList();
+
         await DeleteByUserIdAsync(userId, cancellationToken);
 
         if (!networkIds.Any())
-        {
-            return; // Nenhuma rota para adicionar
-        }
+            return;
 
-        // Buscar informações das redes destino
-        var allowedNetworks = await _context.Set<RouterAllowedNetwork>()
-            .Include(n => n.Router)
+        var allowedNetworks = await _context.Set<AllowedNetwork>()
             .Where(n => networkIds.Contains(n.Id))
             .ToListAsync(cancellationToken);
 
-        // Validar que todas as redes foram encontradas
         var missingIds = networkIds.Except(allowedNetworks.Select(n => n.Id)).ToList();
         if (missingIds.Any())
-        {
-            throw new KeyNotFoundException($"Redes destino não encontradas: {string.Join(", ", missingIds)}");
-        }
+            throw new KeyNotFoundException($"Redes permitidas não encontradas: {string.Join(", ", missingIds)}");
 
-        // Criar novas rotas
-        var newRoutes = allowedNetworks.Select(network => new UserAllowedRoute
+        var routers = await _context.Set<Router>()
+            .Where(r => r.VpnPeerId != null && allowedNetworks.Select(a => a.VpnPeerId).Contains(r.VpnPeerId!.Value))
+            .ToListAsync(cancellationToken);
+        var routerByPeer = routers.Where(r => r.VpnPeerId != null).ToDictionary(r => r.VpnPeerId!.Value);
+
+        var newRoutes = new List<UserAllowedRoute>();
+        foreach (var network in allowedNetworks)
         {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            RouterId = network.RouterId,
-            RouterAllowedNetworkId = network.Id,
-            NetworkCidr = network.NetworkCidr,
-            Description = network.Description,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        }).ToList();
+            if (!routerByPeer.TryGetValue(network.VpnPeerId, out var router))
+                throw new InvalidOperationException(
+                    $"Não há router associado ao peer {network.VpnPeerId} para a rede permitida {network.Id}.");
+
+            newRoutes.Add(new UserAllowedRoute
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                RouterId = router.Id,
+                AllowedNetworkId = network.Id,
+                NetworkCidr = network.NetworkCidr,
+                Description = network.Description,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
 
         if (newRoutes.Any())
         {
@@ -131,4 +137,3 @@ public class UserAllowedRouteRepository : IUserAllowedRouteRepository
         }
     }
 }
-

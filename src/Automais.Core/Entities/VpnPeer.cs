@@ -37,4 +37,10 @@ public class VpnPeer
     public DateTime UpdatedAt { get; set; }
 
     public VpnNetwork VpnNetwork { get; set; } = null!;
+
+    public ICollection<AllowedNetwork> AllowedNetworks { get; set; } = new List<AllowedNetwork>();
+
+    public ICollection<RemoteNetwork> RemoteNetworks { get; set; } = new List<RemoteNetwork>();
+
+    public ICollection<StaticNetwork> StaticNetworks { get; set; } = new List<StaticNetwork>();
 }

@@ -20,9 +20,9 @@ public class UserAllowedRoute
     public Guid RouterId { get; set; }
     
     /// <summary>
-    /// ID da rede permitida do router (RouterAllowedNetwork)
+    /// ID da rede permitida (<see cref="AllowedNetwork"/>).
     /// </summary>
-    public Guid RouterAllowedNetworkId { get; set; }
+    public Guid AllowedNetworkId { get; set; }
     
     /// <summary>
     /// CIDR da rede permitida (ex: "10.0.1.0/24")
@@ -40,6 +40,6 @@ public class UserAllowedRoute
     // Navigation Properties
     public TenantUser User { get; set; } = null!;
     public Router Router { get; set; } = null!;
-    public RouterAllowedNetwork RouterAllowedNetwork { get; set; } = null!;
+    public AllowedNetwork AllowedNetwork { get; set; } = null!;
 }
 

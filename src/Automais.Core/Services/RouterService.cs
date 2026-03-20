@@ -13,7 +13,7 @@ public class RouterService : IRouterService
 {
     private readonly IRouterRepository _routerRepository;
     private readonly ITenantRepository _tenantRepository;
-    private readonly IRouterAllowedNetworkRepository? _allowedNetworkRepository;
+    private readonly IAllowedNetworkRepository? _allowedNetworkRepository;
     private readonly IVpnPeerService? _vpnPeerService;
     private readonly IVpnNetworkRepository? _vpnNetworkRepository;
     private readonly IVpnPeerRepository? _vpnPeerRepository;
@@ -22,7 +22,7 @@ public class RouterService : IRouterService
     public RouterService(
         IRouterRepository routerRepository,
         ITenantRepository tenantRepository,
-        IRouterAllowedNetworkRepository? allowedNetworkRepository = null,
+        IAllowedNetworkRepository? allowedNetworkRepository = null,
         IVpnPeerService? vpnPeerService = null,
         IVpnNetworkRepository? vpnNetworkRepository = null,
         IVpnPeerRepository? vpnPeerRepository = null,

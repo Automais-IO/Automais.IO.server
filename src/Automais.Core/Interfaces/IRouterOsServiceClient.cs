@@ -14,7 +14,7 @@ public interface IRouterOsServiceClient
     /// </summary>
     Task<(bool Success, string? GatewayUsed)> AddRouteAsync(
         Guid routerId,
-        RouterStaticRouteDto route,
+        StaticNetworkDto route,
         CancellationToken cancellationToken = default);
 
     /// <summary>

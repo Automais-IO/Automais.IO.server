@@ -61,6 +61,22 @@ public class VpnPeerRepository : IVpnPeerRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IEnumerable<VpnPeer>> GetByVpnNetworkIdsAsync(
+        IEnumerable<Guid> vpnNetworkIds,
+        CancellationToken cancellationToken = default)
+    {
+        var idSet = vpnNetworkIds.Distinct().ToHashSet();
+        if (idSet.Count == 0)
+            return Array.Empty<VpnPeer>();
+
+        return await _context.Set<VpnPeer>()
+            .Include(p => p.VpnNetwork)
+            .Where(p => idSet.Contains(p.VpnNetworkId))
+            .OrderBy(p => p.VpnNetworkId)
+            .ThenBy(p => p.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<VpnPeer> CreateAsync(VpnPeer peer, CancellationToken cancellationToken = default)
     {
         _context.Set<VpnPeer>().Add(peer);

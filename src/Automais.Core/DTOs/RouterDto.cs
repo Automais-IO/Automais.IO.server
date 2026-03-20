@@ -72,7 +72,7 @@ public class CreateRouterDto
     public Guid? VpnNetworkId { get; set; }
     public string? Description { get; set; }
     /// <summary>
-    /// Ignorado na criação: redes destino são gerenciadas via CRUD em /routers/{id}/destination-networks após criar o router.
+    /// Ignorado na criação: redes permitidas (allowed_networks) e LAN remota via CRUD em /routers/{id}/allowed-networks e /remote-networks.
     /// </summary>
     public IEnumerable<string>? AllowedNetworks { get; set; }
     /// <summary>

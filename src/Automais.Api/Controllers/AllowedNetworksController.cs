@@ -8,16 +8,16 @@ namespace Automais.Api.Controllers;
 /// Controller para gerenciamento de redes destino dos routers (redes para as quais o tráfego VPN é encaminhado).
 /// </summary>
 [ApiController]
-[Route("api/routers/{routerId:guid}/destination-networks")]
+[Route("api/routers/{routerId:guid}/allowed-networks")]
 [Produces("application/json")]
-public class RouterAllowedNetworksController : ControllerBase
+public class AllowedNetworksController : ControllerBase
 {
-    private readonly IRouterAllowedNetworkService _service;
-    private readonly ILogger<RouterAllowedNetworksController> _logger;
+    private readonly IAllowedNetworkService _service;
+    private readonly ILogger<AllowedNetworksController> _logger;
 
-    public RouterAllowedNetworksController(
-        IRouterAllowedNetworkService service,
-        ILogger<RouterAllowedNetworksController> logger)
+    public AllowedNetworksController(
+        IAllowedNetworkService service,
+        ILogger<AllowedNetworksController> logger)
     {
         _service = service;
         _logger = logger;
@@ -27,7 +27,7 @@ public class RouterAllowedNetworksController : ControllerBase
     /// Lista todas as redes destino de um router.
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<RouterAllowedNetworkDto>>> GetByRouter(
+    public async Task<ActionResult<IEnumerable<AllowedNetworkDto>>> GetByRouter(
         Guid routerId,
         CancellationToken cancellationToken)
     {
@@ -47,7 +47,7 @@ public class RouterAllowedNetworksController : ControllerBase
     /// Obtém uma rede destino por ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<RouterAllowedNetworkDto>> GetById(
+    public async Task<ActionResult<AllowedNetworkDto>> GetById(
         Guid routerId,
         Guid id,
         CancellationToken cancellationToken)
@@ -72,9 +72,9 @@ public class RouterAllowedNetworksController : ControllerBase
     /// Cria uma nova rede destino para o router.
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<RouterAllowedNetworkDto>> Create(
+    public async Task<ActionResult<AllowedNetworkDto>> Create(
         Guid routerId,
-        [FromBody] CreateRouterAllowedNetworkDto dto,
+        [FromBody] CreateAllowedNetworkDto dto,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Criando rede destino para router {RouterId}: {Cidr}", routerId, dto.NetworkCidr);
@@ -102,10 +102,10 @@ public class RouterAllowedNetworksController : ControllerBase
     /// Atualiza uma rede destino.
     /// </summary>
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<RouterAllowedNetworkDto>> Update(
+    public async Task<ActionResult<AllowedNetworkDto>> Update(
         Guid routerId,
         Guid id,
-        [FromBody] UpdateRouterAllowedNetworkDto dto,
+        [FromBody] UpdateAllowedNetworkDto dto,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Atualizando rede destino {Id} do router {RouterId}", id, routerId);

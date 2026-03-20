@@ -1,5 +1,6 @@
 using Automais.Api.Extensions;
 using Automais.Core.DTOs;
+using Automais.Core.Entities;
 using Automais.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -226,7 +227,8 @@ public class HostsController : ControllerBase
     {
         try
         {
-            var script = await _hostService.GenerateSetupScriptAsync(id, cancellationToken);
+            var publicApiBaseUrl = $"{Request.Scheme}://{Request.Host}";
+            var script = await _hostService.GenerateSetupScriptAsync(id, publicApiBaseUrl, cancellationToken);
             return Content(script, "text/x-shellscript", System.Text.Encoding.UTF8);
         }
         catch (KeyNotFoundException ex)
@@ -240,6 +242,31 @@ public class HostsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao gerar setup script do host {HostId}", id);
+            return StatusCode(500, new { message = "Erro interno", detail = ex.Message });
+        }
+    }
+
+    /// <summary>Chamado pelo script de bootstrap no host (público, token efêmero) para marcar provisionamento como Ready.</summary>
+    [HttpPost("hosts/{id:guid}/setup-complete")]
+    public async Task<IActionResult> CompleteSetup(Guid id, [FromBody] SetupCompleteRequestDto? body, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var token = body?.Token?.Trim() ?? string.Empty;
+            await _hostService.CompleteSetupAsync(id, token, cancellationToken);
+            return Ok(new { provisioningStatus = HostProvisioningStatus.Ready.ToString() });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao concluir setup do host {HostId}", id);
             return StatusCode(500, new { message = "Erro interno", detail = ex.Message });
         }
     }

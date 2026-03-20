@@ -672,6 +672,9 @@ public class ApplicationDbContext : DbContext
 
             entity.Property(e => e.SetupRequestedAt);
 
+            entity.Property(e => e.SetupCompletionToken)
+                .HasMaxLength(128);
+
             entity.Property(e => e.SshPrivateKey);
             entity.Property(e => e.SshPublicKey);
 

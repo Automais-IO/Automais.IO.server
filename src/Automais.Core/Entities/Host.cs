@@ -37,6 +37,9 @@ public class Host
     /// <summary>Timestamp de quando o usuário clicou em "Conectar-se"; o script expira após 10 min.</summary>
     public DateTime? SetupRequestedAt { get; set; }
 
+    /// <summary>Token efêmero (só no servidor) para o host confirmar fim do setup via POST público; gerado ao solicitar setup (Conectar-se).</summary>
+    public string? SetupCompletionToken { get; set; }
+
     public HostProvisioningStatus ProvisioningStatus { get; set; } = HostProvisioningStatus.PendingInstall;
     public HostStatus Status { get; set; } = HostStatus.Offline;
 

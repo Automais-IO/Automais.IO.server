@@ -12,5 +12,6 @@ public interface IHostService
     Task<HostDto> UpdateAsync(Guid id, UpdateHostDto dto, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task<string> ActivateSetupAsync(Guid hostId, string baseUrl, CancellationToken cancellationToken = default);
-    Task<string> GenerateSetupScriptAsync(Guid hostId, CancellationToken cancellationToken = default);
+    Task<string> GenerateSetupScriptAsync(Guid hostId, string publicApiBaseUrl, CancellationToken cancellationToken = default);
+    Task CompleteSetupAsync(Guid hostId, string token, CancellationToken cancellationToken = default);
 }

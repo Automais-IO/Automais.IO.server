@@ -373,9 +373,9 @@ public class HostService : IHostService
         sb.AppendLine("if command -v wg &>/dev/null; then");
         sb.AppendLine("  log '[4/6] Pacote WireGuard já instalado — nada a baixar.'");
         sb.AppendLine("else");
-        sb.AppendLine("  log '[4/6] Instalando WireGuard via apt — pode levar vários minutos e gerar bastante saída abaixo.'");
+        sb.AppendLine("  log '[4/6] WireGuard ausente — instalando via apt (Ubuntu Server / Raspberry Pi; sem apt-get update no script).'");
+        sb.AppendLine("  log '[4/6] Se falhar, rode antes no host: sudo apt-get update && sudo apt-get install -y wireguard'");
         sb.AppendLine("  export DEBIAN_FRONTEND=noninteractive");
-        sb.AppendLine("  apt-get update");
         sb.AppendLine("  apt-get install -y wireguard");
         sb.AppendLine("  log '[4/6] WireGuard instalado.'");
         sb.AppendLine("fi");

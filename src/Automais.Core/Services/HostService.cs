@@ -181,13 +181,13 @@ public class HostService : IHostService
         if (dto.Status.HasValue)
             host.Status = dto.Status.Value;
         if (dto.LastSeenAt.HasValue)
-            host.LastSeenAt = dto.LastSeenAt;
+            host.LastSeenAt = ToPostgreSqlUtc(dto.LastSeenAt.Value);
         if (dto.Description != null)
             host.Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim();
         if (dto.MetricsJson != null)
             host.MetricsJson = dto.MetricsJson;
         if (dto.LastMetricsAt.HasValue)
-            host.LastMetricsAt = dto.LastMetricsAt;
+            host.LastMetricsAt = ToPostgreSqlUtc(dto.LastMetricsAt.Value);
 
         host.UpdatedAt = DateTime.UtcNow;
         await _hostRepository.UpdateAsync(host, cancellationToken);
@@ -563,4 +563,15 @@ public class HostService : IHostService
         RandomNumberGenerator.Fill(bytes);
         return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
+
+    /// <summary>
+    /// Npgsql / PostgreSQL timestamptz só aceita DateTime Kind=Utc.
+    /// JSON (vpnserver, front) pode deserializar como Local ou Unspecified.
+    /// </summary>
+    private static DateTime ToPostgreSqlUtc(DateTime dt) => dt.Kind switch
+    {
+        DateTimeKind.Utc => dt,
+        DateTimeKind.Local => dt.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+    };
 }

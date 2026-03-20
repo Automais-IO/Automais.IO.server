@@ -25,6 +25,9 @@ public class HostDto
     /// <summary>FK para <c>vpn_peers</c>.</summary>
     public Guid? VpnPeerId { get; set; }
     public bool VpnPeerKeysConfigured { get; set; }
+
+    /// <summary>Timestamp de quando o setup foi solicitado (para controle de expiração).</summary>
+    public DateTime? SetupRequestedAt { get; set; }
 }
 
 public class CreateHostDto
@@ -34,7 +37,18 @@ public class CreateHostDto
     public Guid VpnNetworkId { get; set; }
     /// <summary>IP manual (opcional); se vazio, aloca automaticamente.</summary>
     public string? VpnIp { get; set; }
+    public int SshPort { get; set; } = 22;
     public string? Description { get; set; }
+}
+
+/// <summary>
+/// DTO estendido retornado apenas para requests internos (serviço Python).
+/// Inclui credenciais SSH que nunca devem ser expostas ao browser.
+/// </summary>
+public class InternalHostDto : HostDto
+{
+    public string? SshPrivateKey { get; set; }
+    public string? SshPassword { get; set; }
 }
 
 public class UpdateHostDto

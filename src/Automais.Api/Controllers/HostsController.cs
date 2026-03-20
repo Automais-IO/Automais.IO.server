@@ -69,12 +69,17 @@ public class HostsController : ControllerBase
     {
         try
         {
+            if (HttpContext.IsLocalRequest() || HttpContext.IsInternalRequest(_configuration))
+            {
+                var internalHost = await _hostService.GetByIdInternalAsync(id, cancellationToken);
+                if (internalHost == null)
+                    return NotFound(new { message = $"Host com ID {id} não encontrado" });
+                return Ok(internalHost);
+            }
+
             var host = await _hostService.GetByIdAsync(id, cancellationToken);
             if (host == null)
                 return NotFound(new { message = $"Host com ID {id} não encontrado" });
-
-            if (HttpContext.IsLocalRequest() || HttpContext.IsInternalRequest(_configuration))
-                return Ok(host);
 
             var userTenantId = this.GetTenantId(_authService);
             if (!userTenantId.HasValue || host.TenantId != userTenantId.Value)
@@ -178,6 +183,60 @@ public class HostsController : ControllerBase
         {
             _logger.LogError(ex, "Erro ao deletar host {HostId}", id);
             return StatusCode(500, new { message = "Erro interno ao deletar host", detail = ex.Message });
+        }
+    }
+
+    [HttpPost("hosts/{id:guid}/activate-setup")]
+    public async Task<ActionResult<object>> ActivateSetup(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = await _hostService.GetByIdAsync(id, cancellationToken);
+            if (existing == null)
+                return NotFound(new { message = $"Host com ID {id} não encontrado" });
+
+            if (!HttpContext.IsLocalRequest() && !HttpContext.IsInternalRequest(_configuration))
+            {
+                var userTenantId = this.GetTenantId(_authService);
+                if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
+                    return StatusCode(403, new { message = "Acesso negado ao host." });
+            }
+
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var url = await _hostService.ActivateSetupAsync(id, baseUrl, cancellationToken);
+            return Ok(new { url });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao ativar setup do host {HostId}", id);
+            return StatusCode(500, new { message = "Erro interno", detail = ex.Message });
+        }
+    }
+
+    [HttpGet("hosts/{id:guid}/setup-script")]
+    public async Task<IActionResult> GetSetupScript(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var script = await _hostService.GenerateSetupScriptAsync(id, cancellationToken);
+            return Content(script, "text/x-shellscript", System.Text.Encoding.UTF8);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao gerar setup script do host {HostId}", id);
+            return StatusCode(500, new { message = "Erro interno", detail = ex.Message });
         }
     }
 

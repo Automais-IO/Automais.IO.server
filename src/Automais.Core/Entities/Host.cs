@@ -31,8 +31,14 @@ public class Host
     /// <summary>Chave pública SSH correspondente (copiada no bootstrap para authorized_keys).</summary>
     public string? SshPublicKey { get; set; }
 
-    /// <summary>Senha (plaintext efêmero ou hash) — só usada durante bootstrap / sudo.</summary>
+    /// <summary>Senha (plaintext efêmero) — usada durante bootstrap / sudo e pelo serviço Python para SSH.</summary>
     public string? SshPassword { get; set; }
+
+    /// <summary>Hash bcrypt da senha SSH (para validação futura sem expor plaintext).</summary>
+    public string? SshPasswordHash { get; set; }
+
+    /// <summary>Timestamp de quando o usuário clicou em "Conectar-se"; o script expira após 10 min.</summary>
+    public DateTime? SetupRequestedAt { get; set; }
 
     public HostProvisioningStatus ProvisioningStatus { get; set; } = HostProvisioningStatus.PendingInstall;
     public HostStatus Status { get; set; } = HostStatus.Offline;

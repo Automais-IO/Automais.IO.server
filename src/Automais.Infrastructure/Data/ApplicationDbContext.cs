@@ -641,6 +641,11 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.SshPassword)
                 .HasMaxLength(500);
 
+            entity.Property(e => e.SshPasswordHash)
+                .HasMaxLength(500);
+
+            entity.Property(e => e.SetupRequestedAt);
+
             entity.Property(e => e.SshPrivateKey);
             entity.Property(e => e.SshPublicKey);
 

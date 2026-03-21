@@ -999,69 +999,73 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
         return;
     }
 
-    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-    logger.LogInformation("WebSocket conectado para host {HostId} (tenant {TenantId})", hostId, userInfo.TenantId);
+    const int hostsPythonPort = 8766;
+    string wsUrl;
+
+    var configuredBackend = configuration["HostsWebSocket:BackendUrl"]?.Trim();
+    if (!string.IsNullOrWhiteSpace(configuredBackend))
+    {
+        wsUrl = configuredBackend.TrimEnd('/');
+        if (!wsUrl.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) &&
+            !wsUrl.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+        {
+            wsUrl = $"ws://{wsUrl}";
+        }
+
+        logger.LogInformation("Hosts WebSocket: HostsWebSocket:BackendUrl → {WsUrl}", wsUrl);
+    }
+    else
+    {
+        wsUrl = $"ws://127.0.0.1:{hostsPythonPort}";
+        logger.LogInformation("Hosts WebSocket: backend padrão loopback {WsUrl}", wsUrl);
+    }
+
+    // Conectar ao Python ANTES do upgrade no browser: evita onopen seguido de close imediato
+    // (race em que o front acha o WSS aberto mas o proxy já derrubou por ECONNREFUSED na 8766).
+    logger.LogInformation("Conectando ao hosts.io em {WsUrl} para host {HostId} (antes do AcceptWebSocket)", wsUrl, hostId);
+
+    var upstreamWebSocket = new System.Net.WebSockets.ClientWebSocket();
+    try
+    {
+        await upstreamWebSocket.ConnectAsync(new Uri(wsUrl), context.RequestAborted);
+        logger.LogInformation("Upstream hosts.io OK para host {HostId}", hostId);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Erro ao conectar ao hosts.io em {WsUrl} para host {HostId}", wsUrl, hostId);
+        upstreamWebSocket.Dispose();
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message =
+                "Serviço Hosts (Python) indisponível. Inicie Automais.IO.hosts na porta 8766 no mesmo servidor da API ou ajuste HostsWebSocket:BackendUrl.",
+            code = "HOSTS_UPSTREAM_UNAVAILABLE",
+            detail = ex.Message
+        });
+        return;
+    }
+
+    WebSocket browserWebSocket;
+    try
+    {
+        browserWebSocket = await context.WebSockets.AcceptWebSocketAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Falha ao aceitar WebSocket do browser para host {HostId}", hostId);
+        await CloseHostsUpstreamQuietlyAsync(upstreamWebSocket, logger);
+        upstreamWebSocket.Dispose();
+        return;
+    }
+
+    logger.LogInformation("WebSocket browser conectado para host {HostId} (tenant {TenantId})", hostId, userInfo.TenantId);
 
     try
     {
-        const int hostsPythonPort = 8766;
-        string wsUrl;
-
-        var configuredBackend = configuration["HostsWebSocket:BackendUrl"]?.Trim();
-        if (!string.IsNullOrWhiteSpace(configuredBackend))
-        {
-            wsUrl = configuredBackend.TrimEnd('/');
-            if (!wsUrl.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) &&
-                !wsUrl.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
-            {
-                wsUrl = $"ws://{wsUrl}";
-            }
-
-            logger.LogInformation("Hosts WebSocket: HostsWebSocket:BackendUrl → {WsUrl}", wsUrl);
-        }
-        else
-        {
-            wsUrl = $"ws://127.0.0.1:{hostsPythonPort}";
-            logger.LogInformation("Hosts WebSocket: backend padrão loopback {WsUrl}", wsUrl);
-        }
-
-        logger.LogInformation("Conectando ao hosts.io em {WsUrl} para host {HostId}", wsUrl, hostId);
-
-        var clientWebSocket = new System.Net.WebSockets.ClientWebSocket();
-        try
-        {
-            await clientWebSocket.ConnectAsync(new Uri(wsUrl), context.RequestAborted);
-            logger.LogInformation("Conectado ao serviço hosts.io para host {HostId}", hostId);
-
-            var cancellationToken = context.RequestAborted;
-            var clientToServer = ProxyWebSocketMessages(webSocket, clientWebSocket, cancellationToken, logger);
-            var serverToClient = ProxyWebSocketMessages(clientWebSocket, webSocket, cancellationToken, logger);
-            await Task.WhenAny(clientToServer, serverToClient);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Erro ao conectar ao hosts.io em {WsUrl} para host {HostId}", wsUrl, hostId);
-            await SendWebSocketErrorAndClose(webSocket, $"Erro ao conectar ao serviço Hosts: {ex.Message}", logger);
-        }
-        finally
-        {
-            if (clientWebSocket.State == WebSocketState.Open || clientWebSocket.State == WebSocketState.CloseReceived)
-            {
-                try
-                {
-                    await clientWebSocket.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure,
-                        "Connection closed",
-                        CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Erro ao fechar conexão com hosts.io: {Error}", ex.Message);
-                }
-            }
-
-            clientWebSocket.Dispose();
-        }
+        var cancellationToken = context.RequestAborted;
+        var browserToUpstream = ProxyWebSocketMessages(browserWebSocket, upstreamWebSocket, cancellationToken, logger);
+        var upstreamToBrowser = ProxyWebSocketMessages(upstreamWebSocket, browserWebSocket, cancellationToken, logger);
+        await Task.WhenAny(browserToUpstream, upstreamToBrowser);
     }
     catch (Exception ex)
     {
@@ -1069,13 +1073,23 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
     }
     finally
     {
-        if (webSocket.State == System.Net.WebSockets.WebSocketState.Open ||
-            webSocket.State == System.Net.WebSockets.WebSocketState.CloseReceived)
+        await CloseHostsUpstreamQuietlyAsync(upstreamWebSocket, logger);
+        upstreamWebSocket.Dispose();
+
+        if (browserWebSocket.State == WebSocketState.Open ||
+            browserWebSocket.State == WebSocketState.CloseReceived)
         {
-            await webSocket.CloseAsync(
-                System.Net.WebSockets.WebSocketCloseStatus.NormalClosure,
-                "Connection closed",
-                CancellationToken.None);
+            try
+            {
+                await browserWebSocket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    "Connection closed",
+                    CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Erro ao fechar WebSocket do browser (hosts): {Error}", ex.Message);
+            }
         }
 
         logger.LogInformation("WebSocket desconectado para host {HostId}", hostId);
@@ -1324,6 +1338,24 @@ static async Task SendWebSocketErrorAndClose(WebSocket webSocket, string errorMe
                 errorMessage,
                 CancellationToken.None);
         }
+    }
+}
+
+static async Task CloseHostsUpstreamQuietlyAsync(ClientWebSocket webSocket, ILogger logger)
+{
+    try
+    {
+        if (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived)
+        {
+            await webSocket.CloseAsync(
+                WebSocketCloseStatus.NormalClosure,
+                "Connection closed",
+                CancellationToken.None);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogDebug(ex, "Ao fechar upstream Hosts (Python): {Error}", ex.Message);
     }
 }
 

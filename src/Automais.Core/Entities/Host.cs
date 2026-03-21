@@ -50,6 +50,15 @@ public class Host
     public string? MetricsJson { get; set; }
     public DateTime? LastMetricsAt { get; set; }
 
+    /// <summary>Relatado pelo serviço hosts (Python): há sessão interativa (PTY) ativa ou destacada.</summary>
+    public bool SshInteractiveSessionOpen { get; set; }
+
+    /// <summary>Início UTC da sessão interativa mais antiga ainda ativa neste host (painel web).</summary>
+    public DateTime? SshInteractiveSessionSince { get; set; }
+
+    /// <summary>Última vez que o serviço hosts atualizou os campos de sessão interativa.</summary>
+    public DateTime? LastSshInteractiveReportAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

@@ -15,6 +15,7 @@ using Npgsql;
 using System.Net;
 using System.Net.WebSockets;
 using System.Security.Cryptography.X509Certificates;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 
@@ -1063,7 +1064,14 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
     try
     {
         var cancellationToken = context.RequestAborted;
-        var browserToUpstream = ProxyWebSocketMessages(browserWebSocket, upstreamWebSocket, cancellationToken, logger);
+        // Injeta terminalUserId / terminalTenantId (JWT) em cada frame terminal_* — o Python confia nisto, não no browser.
+        var browserToUpstream = ProxyHostsBrowserToUpstream(
+            browserWebSocket,
+            upstreamWebSocket,
+            userInfo.Id,
+            userInfo.TenantId,
+            cancellationToken,
+            logger);
         var upstreamToBrowser = ProxyWebSocketMessages(upstreamWebSocket, browserWebSocket, cancellationToken, logger);
         await Task.WhenAny(browserToUpstream, upstreamToBrowser);
     }
@@ -1260,6 +1268,122 @@ static string ReplaceEnvironmentVariables(string input)
     }
 
     return result;
+}
+
+/// <summary>
+/// Browser → Python hosts: acumula texto UTF-8 e injeta identidade do painel (JWT) em mensagens <c>terminal_*</c>.
+/// </summary>
+static async Task ProxyHostsBrowserToUpstream(
+    WebSocket browser,
+    ClientWebSocket upstream,
+    Guid terminalUserId,
+    Guid terminalTenantId,
+    CancellationToken cancellationToken,
+    ILogger logger)
+{
+    var buffer = new byte[65536];
+    using var accum = new MemoryStream();
+    try
+    {
+        while (browser.State == WebSocketState.Open && upstream.State == WebSocketState.Open)
+        {
+            var result = await browser.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                if (upstream.State == WebSocketState.Open)
+                {
+                    await upstream.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Connection closed by browser",
+                        cancellationToken);
+                }
+                break;
+            }
+
+            if (result.MessageType == WebSocketMessageType.Binary)
+            {
+                await upstream.SendAsync(
+                    new ArraySegment<byte>(buffer, 0, result.Count),
+                    WebSocketMessageType.Binary,
+                    result.EndOfMessage,
+                    cancellationToken);
+                continue;
+            }
+
+            if (result.MessageType == WebSocketMessageType.Text)
+            {
+                accum.Write(buffer, 0, result.Count);
+                if (!result.EndOfMessage)
+                    continue;
+
+                var payload = accum.ToArray();
+                accum.SetLength(0);
+                var forwarded = TryInjectTrustedTerminalIdentity(
+                    payload.AsSpan(),
+                    terminalUserId,
+                    terminalTenantId);
+                if (forwarded != null)
+                    payload = forwarded;
+                await upstream.SendAsync(
+                    new ArraySegment<byte>(payload),
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    cancellationToken);
+            }
+        }
+    }
+    catch (WebSocketException ex)
+    {
+        logger.LogWarning(ex, "Hosts WS browser→upstream: {Error}", ex.Message);
+    }
+    catch (OperationCanceledException)
+    {
+        logger.LogInformation("Hosts WS browser→upstream cancelado");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Hosts WS browser→upstream: {Error}", ex.Message);
+    }
+}
+
+/// <summary>
+/// Sobrescreve terminalUserId / terminalTenantId no JSON (ação <c>terminal_*</c>). Retorna null se não for caso de injeção.
+/// </summary>
+static byte[]? TryInjectTrustedTerminalIdentity(
+    ReadOnlySpan<byte> utf8Payload,
+    Guid terminalUserId,
+    Guid terminalTenantId)
+{
+    try
+    {
+        using var doc = JsonDocument.Parse(utf8Payload.ToArray());
+        var root = doc.RootElement;
+        if (!root.TryGetProperty("action", out var actEl))
+            return null;
+        var action = actEl.GetString();
+        if (string.IsNullOrEmpty(action) || !action.StartsWith("terminal_", StringComparison.Ordinal))
+            return null;
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var prop in root.EnumerateObject())
+            {
+                if (prop.NameEquals("terminalUserId") || prop.NameEquals("terminalTenantId"))
+                    continue;
+                prop.WriteTo(writer);
+            }
+            writer.WriteString("terminalUserId", terminalUserId.ToString("D"));
+            writer.WriteString("terminalTenantId", terminalTenantId.ToString("D"));
+            writer.WriteEndObject();
+        }
+        return stream.ToArray();
+    }
+    catch (JsonException)
+    {
+        return null;
+    }
 }
 
 /// <summary>

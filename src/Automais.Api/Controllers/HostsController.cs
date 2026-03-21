@@ -141,6 +141,10 @@ public class HostsController : ControllerBase
                 var userTenantId = this.GetTenantId(_authService);
                 if (!userTenantId.HasValue || existing.TenantId != userTenantId.Value)
                     return StatusCode(403, new { message = "Acesso negado ao host." });
+
+                dto.SshInteractiveSessionOpen = null;
+                dto.SshInteractiveSessionSince = null;
+                dto.LastSshInteractiveReportAt = null;
             }
 
             var updated = await _hostService.UpdateAsync(id, dto, cancellationToken);

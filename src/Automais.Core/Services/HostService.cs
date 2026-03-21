@@ -189,6 +189,18 @@ public class HostService : IHostService
         if (dto.LastMetricsAt.HasValue)
             host.LastMetricsAt = ToPostgreSqlUtc(dto.LastMetricsAt.Value);
 
+        if (dto.SshInteractiveSessionOpen.HasValue)
+        {
+            host.SshInteractiveSessionOpen = dto.SshInteractiveSessionOpen.Value;
+            if (!dto.SshInteractiveSessionOpen.Value)
+                host.SshInteractiveSessionSince = null;
+            else if (dto.SshInteractiveSessionSince.HasValue)
+                host.SshInteractiveSessionSince = ToPostgreSqlUtc(dto.SshInteractiveSessionSince.Value);
+        }
+
+        if (dto.LastSshInteractiveReportAt.HasValue)
+            host.LastSshInteractiveReportAt = ToPostgreSqlUtc(dto.LastSshInteractiveReportAt.Value);
+
         host.UpdatedAt = DateTime.UtcNow;
         await _hostRepository.UpdateAsync(host, cancellationToken);
         var reloaded = await _hostRepository.GetByIdAsync(id, cancellationToken);
@@ -494,6 +506,9 @@ public class HostService : IHostService
             Description = h.Description,
             MetricsJson = h.MetricsJson,
             LastMetricsAt = h.LastMetricsAt,
+            SshInteractiveSessionOpen = h.SshInteractiveSessionOpen,
+            SshInteractiveSessionSince = h.SshInteractiveSessionSince,
+            LastSshInteractiveReportAt = h.LastSshInteractiveReportAt,
             CreatedAt = h.CreatedAt,
             UpdatedAt = h.UpdatedAt,
             VpnPeerId = vpnPeerId,
@@ -532,6 +547,9 @@ public class HostService : IHostService
             Description = h.Description,
             MetricsJson = h.MetricsJson,
             LastMetricsAt = h.LastMetricsAt,
+            SshInteractiveSessionOpen = h.SshInteractiveSessionOpen,
+            SshInteractiveSessionSince = h.SshInteractiveSessionSince,
+            LastSshInteractiveReportAt = h.LastSshInteractiveReportAt,
             CreatedAt = h.CreatedAt,
             UpdatedAt = h.UpdatedAt,
             VpnPeerId = vpnPeerId,

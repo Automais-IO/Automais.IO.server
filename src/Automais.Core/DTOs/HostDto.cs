@@ -20,6 +20,16 @@ public class HostDto
     public string? Description { get; set; }
     public string? MetricsJson { get; set; }
     public DateTime? LastMetricsAt { get; set; }
+
+    /// <summary>Sessão SSH interativa (console web) ativa ou destacada no serviço hosts.</summary>
+    public bool SshInteractiveSessionOpen { get; set; }
+
+    /// <summary>Quando a sessão mais antiga ainda ativa começou (UTC).</summary>
+    public DateTime? SshInteractiveSessionSince { get; set; }
+
+    /// <summary>Último relatório do serviço hosts sobre sessão interativa.</summary>
+    public DateTime? LastSshInteractiveReportAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
@@ -73,4 +83,10 @@ public class UpdateHostDto
     public string? Description { get; set; }
     public string? MetricsJson { get; set; }
     public DateTime? LastMetricsAt { get; set; }
+
+    /// <summary>Somente requisições internas (serviço hosts).</summary>
+    public bool? SshInteractiveSessionOpen { get; set; }
+
+    public DateTime? SshInteractiveSessionSince { get; set; }
+    public DateTime? LastSshInteractiveReportAt { get; set; }
 }

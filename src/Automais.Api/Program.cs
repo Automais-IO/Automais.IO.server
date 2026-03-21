@@ -931,7 +931,8 @@ app.Map("/api/ws/routeros/{routerId:guid}", async (HttpContext context, Guid rou
     }
 });
 
-// Proxy WebSocket para serviço Python hosts.io (SSH / console Linux) — porta 8766
+// Proxy WebSocket para serviço Python hosts.io (SSH / console Linux) — porta 8766, loopback por padrão.
+// Autenticação: JWT em query (?access_token= ou ?token=) antes do upgrade (browser não envia Authorization no WebSocket).
 app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
@@ -941,31 +942,71 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
         return;
     }
 
-    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
     var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-    logger.LogInformation("WebSocket conectado para host {HostId}", hostId);
+    var authService = context.RequestServices.GetRequiredService<IAuthService>();
+    var hostRepository = context.RequestServices.GetRequiredService<IHostRepository>();
+    var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
+
+    var bearerToken = context.Request.Query["access_token"].FirstOrDefault()
+                      ?? context.Request.Query["token"].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(bearerToken))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { message = "Token ausente", code = "UNAUTHORIZED" });
+        return;
+    }
+
+    var (tokenValid, mustChangePassword) =
+        await authService.GetTokenPasswordChangeStateAsync(bearerToken, context.RequestAborted);
+    if (!tokenValid)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { message = "Token inválido ou expirado", code = "UNAUTHORIZED" });
+        return;
+    }
+
+    if (mustChangePassword)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = "Defina uma nova senha antes de continuar.",
+            code = "MUST_CHANGE_PASSWORD"
+        });
+        return;
+    }
+
+    var userInfo = await authService.ValidateTokenAsync(bearerToken, context.RequestAborted);
+    if (userInfo == null)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { message = "Token inválido ou expirado", code = "UNAUTHORIZED" });
+        return;
+    }
+
+    var host = await hostRepository.GetByIdAsync(hostId, context.RequestAborted);
+    if (host == null)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        await context.Response.WriteAsJsonAsync(new { message = "Host não encontrado" });
+        return;
+    }
+
+    if (host.TenantId != userInfo.TenantId)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { message = "Acesso negado a este host", code = "FORBIDDEN" });
+        return;
+    }
+
+    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+    logger.LogInformation("WebSocket conectado para host {HostId} (tenant {TenantId})", hostId, userInfo.TenantId);
 
     try
     {
-        var hostRepository = context.RequestServices.GetRequiredService<Automais.Core.Interfaces.IHostRepository>();
-        var vpnNetworkRepository = context.RequestServices.GetRequiredService<Automais.Core.Interfaces.IVpnNetworkRepository>();
-        var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
-
-        var host = await hostRepository.GetByIdAsync(hostId, context.RequestAborted);
-        if (host == null)
-        {
-            await SendWebSocketErrorAndClose(webSocket, "Host não encontrado", logger);
-            return;
-        }
-
-        var requestHost = context.Request.Host.Host;
-        var isHttps = context.Request.IsHttps ||
-                     context.Request.Headers["X-Forwarded-Proto"].ToString().Equals("https", StringComparison.OrdinalIgnoreCase);
-
         const int hostsPythonPort = 8766;
         string wsUrl;
 
-        // Override explícito (Docker, hosts em outro host, etc.) — ver deploy/nginx e docs/hosts-websocket.md
         var configuredBackend = configuration["HostsWebSocket:BackendUrl"]?.Trim();
         if (!string.IsNullOrWhiteSpace(configuredBackend))
         {
@@ -980,63 +1021,8 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
         }
         else
         {
-            string? serverEndpoint = null;
-            if (host.VpnNetworkId.HasValue)
-            {
-                var vpnNetwork = await vpnNetworkRepository.GetByIdAsync(host.VpnNetworkId.Value, context.RequestAborted);
-                serverEndpoint = vpnNetwork?.ServerEndpoint;
-            }
-
-            if (string.IsNullOrWhiteSpace(serverEndpoint))
-            {
-                wsUrl = $"ws://localhost:{hostsPythonPort}";
-                logger.LogInformation("ServerEndpoint não configurado para host, usando localhost:{Port}", hostsPythonPort);
-            }
-            else
-            {
-                string endpointHost = serverEndpoint;
-                if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-                    endpointHost = serverEndpoint.Replace("http://", "").Split('/')[0].Split(':')[0];
-                else if (serverEndpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                    endpointHost = serverEndpoint.Replace("https://", "").Split('/')[0].Split(':')[0];
-                else if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
-                         serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
-                    endpointHost = serverEndpoint.Replace("ws://", "").Replace("wss://", "").Split('/')[0].Split(':')[0];
-                else
-                    endpointHost = serverEndpoint.Split('/')[0].Split(':')[0];
-
-                if (endpointHost.Equals(requestHost, StringComparison.OrdinalIgnoreCase) ||
-                    endpointHost.Equals("automais.io", StringComparison.OrdinalIgnoreCase) ||
-                    endpointHost.Equals("www.automais.io", StringComparison.OrdinalIgnoreCase))
-                {
-                    wsUrl = $"ws://localhost:{hostsPythonPort}";
-                    logger.LogInformation("ServerEndpoint {ServerEndpoint} é o mesmo domínio da API, usando localhost:{Port}", serverEndpoint, hostsPythonPort);
-                }
-                else
-                {
-                    var wsProtocol = isHttps ? "wss://" : "ws://";
-                    if (serverEndpoint.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) ||
-                        serverEndpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        wsUrl = serverEndpoint.Contains(':', StringComparison.Ordinal) &&
-                                !serverEndpoint.EndsWith("://", StringComparison.OrdinalIgnoreCase)
-                            ? serverEndpoint
-                            : $"{serverEndpoint}:{hostsPythonPort}";
-                    }
-                    else if (serverEndpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var endpointWithoutProtocol = serverEndpoint.Replace("http://", "");
-                        wsUrl = $"{wsProtocol}{endpointWithoutProtocol}:{hostsPythonPort}";
-                    }
-                    else if (serverEndpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var endpointWithoutProtocol = serverEndpoint.Replace("https://", "");
-                        wsUrl = $"wss://{endpointWithoutProtocol}:{hostsPythonPort}";
-                    }
-                    else
-                        wsUrl = $"{wsProtocol}{serverEndpoint}:{hostsPythonPort}";
-                }
-            }
+            wsUrl = $"ws://127.0.0.1:{hostsPythonPort}";
+            logger.LogInformation("Hosts WebSocket: backend padrão loopback {WsUrl}", wsUrl);
         }
 
         logger.LogInformation("Conectando ao hosts.io em {WsUrl} para host {HostId}", wsUrl, hostId);
@@ -1073,6 +1059,7 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
                     logger.LogWarning(ex, "Erro ao fechar conexão com hosts.io: {Error}", ex.Message);
                 }
             }
+
             clientWebSocket.Dispose();
         }
     }
@@ -1090,6 +1077,7 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
                 "Connection closed",
                 CancellationToken.None);
         }
+
         logger.LogInformation("WebSocket desconectado para host {HostId}", hostId);
     }
 });

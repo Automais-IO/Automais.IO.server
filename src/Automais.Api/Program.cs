@@ -1205,7 +1205,20 @@ app.Map("/api/ws/remote/{hostId:guid}", async (HttpContext context, Guid hostId)
     }
 
     var upstreamUri = new Uri($"{wsBase.TrimEnd('/')}/{hostId:D}");
-    logger.LogInformation("Conectando ao remote.io em {UpstreamUri} (antes do AcceptWebSocket)", upstreamUri);
+    // Aceitar o WebSocket do browser antes do upstream: se respondermos 503 JSON, o browser
+    // falha o handshake com código 1006 (sem Upgrade). Com o handshake OK, podemos fechar com 1011.
+    WebSocket browserWebSocket;
+    try
+    {
+        browserWebSocket = await context.WebSockets.AcceptWebSocketAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Falha ao aceitar WebSocket do browser para remote host {HostId}", hostId);
+        return;
+    }
+
+    logger.LogInformation("Conectando ao remote.io em {UpstreamUri} após AcceptWebSocket (host {HostId})", upstreamUri, hostId);
 
     var upstreamWebSocket = new System.Net.WebSockets.ClientWebSocket();
     try
@@ -1217,27 +1230,22 @@ app.Map("/api/ws/remote/{hostId:guid}", async (HttpContext context, Guid hostId)
     {
         logger.LogError(ex, "Erro ao conectar ao remote.io em {UpstreamUri} para host {HostId}", upstreamUri, hostId);
         upstreamWebSocket.Dispose();
-        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-        await context.Response.WriteAsJsonAsync(new
+        try
         {
-            message =
-                "Serviço Remote (Python) indisponível. Inicie Automais.IO.remote na porta 8767 no mesmo servidor da API ou ajuste RemoteWebSocket:BackendUrl.",
-            code = "REMOTE_UPSTREAM_UNAVAILABLE",
-            detail = ex.Message
-        });
-        return;
-    }
+            if (browserWebSocket.State == WebSocketState.Open ||
+                browserWebSocket.State == WebSocketState.CloseReceived)
+            {
+                await browserWebSocket.CloseAsync(
+                    WebSocketCloseStatus.InternalServerError,
+                    "Remote Python indisponivel (porta 8767 ou RemoteWebSocket:BackendUrl).",
+                    CancellationToken.None);
+            }
+        }
+        catch (Exception closeEx)
+        {
+            logger.LogWarning(closeEx, "Ao fechar WebSocket do browser após falha do upstream remote");
+        }
 
-    WebSocket browserWebSocket;
-    try
-    {
-        browserWebSocket = await context.WebSockets.AcceptWebSocketAsync();
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Falha ao aceitar WebSocket do browser para remote host {HostId}", hostId);
-        await CloseHostsUpstreamQuietlyAsync(upstreamWebSocket, logger);
-        upstreamWebSocket.Dispose();
         return;
     }
 

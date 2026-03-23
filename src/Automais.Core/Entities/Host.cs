@@ -19,6 +19,12 @@ public class Host
 
     public int SshPort { get; set; } = 22;
 
+    /// <summary>Porta TCP do servidor VNC (RFB) no host, vista pela VPN (ex.: 5900).</summary>
+    public int RemoteDisplayPort { get; set; } = 5900;
+
+    /// <summary>Se falso, o painel não oferece display remoto e o serviço remote recusa o túnel.</summary>
+    public bool RemoteDisplayEnabled { get; set; } = true;
+
     /// <summary>Usuário SSH criado pelo bootstrap (padrão: automais-io).</summary>
     public string SshUsername { get; set; } = "automais-io";
 

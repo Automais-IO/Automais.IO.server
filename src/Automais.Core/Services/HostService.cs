@@ -102,6 +102,8 @@ public class HostService : IHostService
             HostKind = dto.HostKind,
             VpnNetworkId = dto.VpnNetworkId,
             SshPort = dto.SshPort > 0 ? dto.SshPort : 22,
+            RemoteDisplayPort = dto.RemoteDisplayPort is > 0 and <= 65535 ? dto.RemoteDisplayPort.Value : 5900,
+            RemoteDisplayEnabled = dto.RemoteDisplayEnabled ?? true,
             SshUsername = "automais-io",
             SshPrivateKey = sshPriv,
             SshPublicKey = sshPub,
@@ -200,6 +202,17 @@ public class HostService : IHostService
 
         if (dto.LastSshInteractiveReportAt.HasValue)
             host.LastSshInteractiveReportAt = ToPostgreSqlUtc(dto.LastSshInteractiveReportAt.Value);
+
+        if (dto.RemoteDisplayPort.HasValue)
+        {
+            var p = dto.RemoteDisplayPort.Value;
+            if (p < 1 || p > 65535)
+                throw new InvalidOperationException("RemoteDisplayPort deve estar entre 1 e 65535.");
+            host.RemoteDisplayPort = p;
+        }
+
+        if (dto.RemoteDisplayEnabled.HasValue)
+            host.RemoteDisplayEnabled = dto.RemoteDisplayEnabled.Value;
 
         host.UpdatedAt = DateTime.UtcNow;
         await _hostRepository.UpdateAsync(host, cancellationToken);
@@ -499,6 +512,8 @@ public class HostService : IHostService
             VpnNetworkServerEndpoint = h.VpnNetwork?.ServerEndpoint,
             VpnIp = HostDisplayName.PeerTunnelIpv4Only(peer),
             SshPort = h.SshPort,
+            RemoteDisplayPort = h.RemoteDisplayPort,
+            RemoteDisplayEnabled = h.RemoteDisplayEnabled,
             SshUsername = h.SshUsername,
             ProvisioningStatus = h.ProvisioningStatus,
             Status = h.Status,
@@ -540,6 +555,8 @@ public class HostService : IHostService
             VpnNetworkServerEndpoint = h.VpnNetwork?.ServerEndpoint,
             VpnIp = HostDisplayName.PeerTunnelIpv4Only(peer),
             SshPort = h.SshPort,
+            RemoteDisplayPort = h.RemoteDisplayPort,
+            RemoteDisplayEnabled = h.RemoteDisplayEnabled,
             SshUsername = h.SshUsername,
             ProvisioningStatus = h.ProvisioningStatus,
             Status = h.Status,

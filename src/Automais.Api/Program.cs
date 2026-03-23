@@ -1104,6 +1104,181 @@ app.Map("/api/ws/hosts/{hostId:guid}", async (HttpContext context, Guid hostId) 
     }
 });
 
+// Proxy WebSocket para serviço Python remote.io (VNC / display remoto) — porta 8767, loopback por padrão.
+// Autenticação: JWT em query (?access_token= ou ?token=). Tráfego binário RFB (sem injeção JSON).
+app.Map("/api/ws/remote/{hostId:guid}", async (HttpContext context, Guid hostId) =>
+{
+    if (!context.WebSockets.IsWebSocketRequest)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsync("Expected WebSocket request");
+        return;
+    }
+
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    var authService = context.RequestServices.GetRequiredService<IAuthService>();
+    var hostRepository = context.RequestServices.GetRequiredService<IHostRepository>();
+    var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
+
+    var bearerToken = context.Request.Query["access_token"].FirstOrDefault()
+                      ?? context.Request.Query["token"].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(bearerToken))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { message = "Token ausente", code = "UNAUTHORIZED" });
+        return;
+    }
+
+    var (tokenValid, mustChangePassword) =
+        await authService.GetTokenPasswordChangeStateAsync(bearerToken, context.RequestAborted);
+    if (!tokenValid)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { message = "Token inválido ou expirado", code = "UNAUTHORIZED" });
+        return;
+    }
+
+    if (mustChangePassword)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = "Defina uma nova senha antes de continuar.",
+            code = "MUST_CHANGE_PASSWORD"
+        });
+        return;
+    }
+
+    var userInfo = await authService.ValidateTokenAsync(bearerToken, context.RequestAborted);
+    if (userInfo == null)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { message = "Token inválido ou expirado", code = "UNAUTHORIZED" });
+        return;
+    }
+
+    var host = await hostRepository.GetByIdAsync(hostId, context.RequestAborted);
+    if (host == null)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        await context.Response.WriteAsJsonAsync(new { message = "Host não encontrado" });
+        return;
+    }
+
+    if (host.TenantId != userInfo.TenantId)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { message = "Acesso negado a este host", code = "FORBIDDEN" });
+        return;
+    }
+
+    if (!host.RemoteDisplayEnabled)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = "Display remoto desabilitado para este host.",
+            code = "REMOTE_DISPLAY_DISABLED"
+        });
+        return;
+    }
+
+    const int remotePythonPort = 8767;
+    string wsBase;
+
+    var configuredRemoteBackend = configuration["RemoteWebSocket:BackendUrl"]?.Trim();
+    if (!string.IsNullOrWhiteSpace(configuredRemoteBackend))
+    {
+        wsBase = configuredRemoteBackend.TrimEnd('/');
+        if (!wsBase.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) &&
+            !wsBase.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+        {
+            wsBase = $"ws://{wsBase}";
+        }
+
+        logger.LogInformation("Remote WebSocket: RemoteWebSocket:BackendUrl → {WsBase}", wsBase);
+    }
+    else
+    {
+        wsBase = $"ws://127.0.0.1:{remotePythonPort}";
+        logger.LogInformation("Remote WebSocket: backend padrão loopback {WsBase}", wsBase);
+    }
+
+    var upstreamUri = new Uri($"{wsBase.TrimEnd('/')}/{hostId:D}");
+    logger.LogInformation("Conectando ao remote.io em {UpstreamUri} (antes do AcceptWebSocket)", upstreamUri);
+
+    var upstreamWebSocket = new System.Net.WebSockets.ClientWebSocket();
+    try
+    {
+        await upstreamWebSocket.ConnectAsync(upstreamUri, context.RequestAborted);
+        logger.LogInformation("Upstream remote.io OK para host {HostId}", hostId);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Erro ao conectar ao remote.io em {UpstreamUri} para host {HostId}", upstreamUri, hostId);
+        upstreamWebSocket.Dispose();
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message =
+                "Serviço Remote (Python) indisponível. Inicie Automais.IO.remote na porta 8767 no mesmo servidor da API ou ajuste RemoteWebSocket:BackendUrl.",
+            code = "REMOTE_UPSTREAM_UNAVAILABLE",
+            detail = ex.Message
+        });
+        return;
+    }
+
+    WebSocket browserWebSocket;
+    try
+    {
+        browserWebSocket = await context.WebSockets.AcceptWebSocketAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Falha ao aceitar WebSocket do browser para remote host {HostId}", hostId);
+        await CloseHostsUpstreamQuietlyAsync(upstreamWebSocket, logger);
+        upstreamWebSocket.Dispose();
+        return;
+    }
+
+    logger.LogInformation("WebSocket browser (remote display) conectado para host {HostId} (tenant {TenantId})", hostId, userInfo.TenantId);
+
+    try
+    {
+        var cancellationToken = context.RequestAborted;
+        var browserToUpstream = ProxyWebSocketMessages(browserWebSocket, upstreamWebSocket, cancellationToken, logger);
+        var upstreamToBrowser = ProxyWebSocketMessages(upstreamWebSocket, browserWebSocket, cancellationToken, logger);
+        await Task.WhenAny(browserToUpstream, upstreamToBrowser);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Erro no WebSocket proxy (remote) para host {HostId}", hostId);
+    }
+    finally
+    {
+        await CloseHostsUpstreamQuietlyAsync(upstreamWebSocket, logger);
+        upstreamWebSocket.Dispose();
+
+        if (browserWebSocket.State == WebSocketState.Open ||
+            browserWebSocket.State == WebSocketState.CloseReceived)
+        {
+            try
+            {
+                await browserWebSocket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    "Connection closed",
+                    CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Erro ao fechar WebSocket do browser (remote): {Error}", ex.Message);
+            }
+        }
+
+        logger.LogInformation("WebSocket (remote) desconectado para host {HostId}", hostId);
+    }
+});
+
 // Authorization (opcional para SignalR, mas necessário para APIs)
 app.UseAuthorization();
 
@@ -1391,7 +1566,7 @@ static byte[]? TryInjectTrustedTerminalIdentity(
 /// </summary>
 static async Task ProxyWebSocketMessages(WebSocket source, WebSocket destination, CancellationToken cancellationToken, ILogger logger)
 {
-    var buffer = new byte[4096];
+    var buffer = new byte[65536];
     try
     {
         while (source.State == WebSocketState.Open && destination.State == WebSocketState.Open)

@@ -660,6 +660,12 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.SshPort)
                 .IsRequired();
 
+            entity.Property(e => e.RemoteDisplayPort)
+                .IsRequired();
+
+            entity.Property(e => e.RemoteDisplayEnabled)
+                .IsRequired();
+
             entity.Property(e => e.SshUsername)
                 .IsRequired()
                 .HasMaxLength(100);

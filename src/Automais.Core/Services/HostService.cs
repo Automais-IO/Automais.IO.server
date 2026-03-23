@@ -104,6 +104,7 @@ public class HostService : IHostService
             SshPort = dto.SshPort > 0 ? dto.SshPort : 22,
             RemoteDisplayPort = dto.RemoteDisplayPort is > 0 and <= 65535 ? dto.RemoteDisplayPort.Value : 5900,
             RemoteDisplayEnabled = dto.RemoteDisplayEnabled ?? true,
+            RemoteDisplayUseBootstrapCredentials = dto.RemoteDisplayUseBootstrapCredentials ?? true,
             SshUsername = "automais-io",
             SshPrivateKey = sshPriv,
             SshPublicKey = sshPub,
@@ -214,6 +215,9 @@ public class HostService : IHostService
         if (dto.RemoteDisplayEnabled.HasValue)
             host.RemoteDisplayEnabled = dto.RemoteDisplayEnabled.Value;
 
+        if (dto.RemoteDisplayUseBootstrapCredentials.HasValue)
+            host.RemoteDisplayUseBootstrapCredentials = dto.RemoteDisplayUseBootstrapCredentials.Value;
+
         host.UpdatedAt = DateTime.UtcNow;
         await _hostRepository.UpdateAsync(host, cancellationToken);
         var reloaded = await _hostRepository.GetByIdAsync(id, cancellationToken);
@@ -287,6 +291,16 @@ public class HostService : IHostService
         var host = await _hostRepository.GetByIdAsync(hostId, cancellationToken);
         if (host == null || host.TenantId != tenantId || !host.RemoteDisplayEnabled)
             return null;
+
+        if (!host.RemoteDisplayUseBootstrapCredentials)
+        {
+            return new RemoteDisplayCredentialsDto
+            {
+                Username = string.IsNullOrWhiteSpace(host.SshUsername) ? "automais-io" : host.SshUsername.Trim(),
+                Password = null,
+                HasPassword = false
+            };
+        }
 
         var pwd = host.SshPassword;
         var hasPwd = !string.IsNullOrEmpty(pwd);
@@ -533,6 +547,7 @@ public class HostService : IHostService
             SshPort = h.SshPort,
             RemoteDisplayPort = h.RemoteDisplayPort,
             RemoteDisplayEnabled = h.RemoteDisplayEnabled,
+            RemoteDisplayUseBootstrapCredentials = h.RemoteDisplayUseBootstrapCredentials,
             SshUsername = h.SshUsername,
             ProvisioningStatus = h.ProvisioningStatus,
             Status = h.Status,
@@ -576,6 +591,7 @@ public class HostService : IHostService
             SshPort = h.SshPort,
             RemoteDisplayPort = h.RemoteDisplayPort,
             RemoteDisplayEnabled = h.RemoteDisplayEnabled,
+            RemoteDisplayUseBootstrapCredentials = h.RemoteDisplayUseBootstrapCredentials,
             SshUsername = h.SshUsername,
             ProvisioningStatus = h.ProvisioningStatus,
             Status = h.Status,

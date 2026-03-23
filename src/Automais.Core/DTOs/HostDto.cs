@@ -15,6 +15,8 @@ public class HostDto
     public int SshPort { get; set; }
     public int RemoteDisplayPort { get; set; } = 5900;
     public bool RemoteDisplayEnabled { get; set; } = true;
+    /// <summary>Enviar credenciais de bootstrap ao cliente VNC (desative se o VNC não usar o mesmo par que o SSH).</summary>
+    public bool RemoteDisplayUseBootstrapCredentials { get; set; } = true;
     public string SshUsername { get; set; } = string.Empty;
     public HostProvisioningStatus ProvisioningStatus { get; set; }
     public HostStatus Status { get; set; }
@@ -63,6 +65,7 @@ public class CreateHostDto
     /// <summary>Porta VNC no host (padrão 5900).</summary>
     public int? RemoteDisplayPort { get; set; }
     public bool? RemoteDisplayEnabled { get; set; }
+    public bool? RemoteDisplayUseBootstrapCredentials { get; set; }
     public string? Description { get; set; }
 }
 
@@ -94,6 +97,7 @@ public class UpdateHostDto
     public string? VpnIp { get; set; }
     public int? RemoteDisplayPort { get; set; }
     public bool? RemoteDisplayEnabled { get; set; }
+    public bool? RemoteDisplayUseBootstrapCredentials { get; set; }
     public HostProvisioningStatus? ProvisioningStatus { get; set; }
     public HostStatus? Status { get; set; }
     public DateTime? LastSeenAt { get; set; }

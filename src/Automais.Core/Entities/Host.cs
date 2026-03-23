@@ -25,6 +25,12 @@ public class Host
     /// <summary>Se falso, o painel não oferece display remoto e o serviço remote recusa o túnel.</summary>
     public bool RemoteDisplayEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Se verdadeiro, o painel envia utilizador/senha de bootstrap (SSH) ao noVNC. Desative se o VNC no host
+    /// usar outro utilizador (ex. pi) ou senha própria — caso contrário o servidor responde &quot;Access is denied&quot;.
+    /// </summary>
+    public bool RemoteDisplayUseBootstrapCredentials { get; set; } = true;
+
     /// <summary>Usuário SSH criado pelo bootstrap (padrão: automais-io).</summary>
     public string SshUsername { get; set; } = "automais-io";
 

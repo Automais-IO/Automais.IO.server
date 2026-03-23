@@ -666,6 +666,9 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.RemoteDisplayEnabled)
                 .IsRequired();
 
+            entity.Property(e => e.RemoteDisplayUseBootstrapCredentials)
+                .IsRequired();
+
             entity.Property(e => e.SshUsername)
                 .IsRequired()
                 .HasMaxLength(100);

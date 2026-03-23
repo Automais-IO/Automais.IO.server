@@ -14,4 +14,7 @@ public interface IHostService
     Task<string> ActivateSetupAsync(Guid hostId, string baseUrl, CancellationToken cancellationToken = default);
     Task<string> GenerateSetupScriptAsync(Guid hostId, string publicApiBaseUrl, CancellationToken cancellationToken = default);
     Task CompleteSetupAsync(Guid hostId, string token, CancellationToken cancellationToken = default);
+
+    /// <summary>Para display remoto: credenciais do utilizador bootstrap (VNC deve aceitar o mesmo par que SSH, se configurado no host).</summary>
+    Task<RemoteDisplayCredentialsDto?> GetRemoteDisplayCredentialsAsync(Guid hostId, Guid tenantId, CancellationToken cancellationToken = default);
 }

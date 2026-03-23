@@ -76,6 +76,16 @@ public class InternalHostDto : HostDto
     public string? SshPassword { get; set; }
 }
 
+/// <summary>
+/// Credenciais para o cliente VNC (noVNC) após login no portal — mesma base que o bootstrap SSH (usuário + senha em claro se ainda existir na entidade).
+/// </summary>
+public class RemoteDisplayCredentialsDto
+{
+    public string Username { get; set; } = "";
+    public string? Password { get; set; }
+    public bool HasPassword { get; set; }
+}
+
 public class UpdateHostDto
 {
     public string? Name { get; set; }

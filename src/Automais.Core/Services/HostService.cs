@@ -279,6 +279,25 @@ public class HostService : IHostService
         await _hostRepository.UpdateAsync(host, cancellationToken);
     }
 
+    public async Task<RemoteDisplayCredentialsDto?> GetRemoteDisplayCredentialsAsync(
+        Guid hostId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var host = await _hostRepository.GetByIdAsync(hostId, cancellationToken);
+        if (host == null || host.TenantId != tenantId || !host.RemoteDisplayEnabled)
+            return null;
+
+        var pwd = host.SshPassword;
+        var hasPwd = !string.IsNullOrEmpty(pwd);
+        return new RemoteDisplayCredentialsDto
+        {
+            Username = string.IsNullOrWhiteSpace(host.SshUsername) ? "automais-io" : host.SshUsername.Trim(),
+            Password = hasPwd ? pwd : null,
+            HasPassword = hasPwd
+        };
+    }
+
     public async Task<string> GenerateSetupScriptAsync(Guid hostId, string publicApiBaseUrl, CancellationToken cancellationToken = default)
     {
         var host = await _hostRepository.GetByIdAsync(hostId, cancellationToken)

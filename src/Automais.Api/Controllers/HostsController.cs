@@ -95,6 +95,33 @@ public class HostsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Senha bootstrap do host para pré-autenticar o noVNC (após JWT). O VNC no Linux deve usar o mesmo utilizador/senha que o SSH (ex. unixpw / mesma password que chpasswd no setup).
+    /// </summary>
+    [HttpGet("hosts/{id:guid}/remote-display-credentials")]
+    public async Task<ActionResult<RemoteDisplayCredentialsDto>> GetRemoteDisplayCredentials(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var userTenantId = this.GetTenantId(_authService);
+        if (!userTenantId.HasValue)
+            return Unauthorized(new { message = "Não autenticado." });
+
+        try
+        {
+            var creds = await _hostService.GetRemoteDisplayCredentialsAsync(id, userTenantId.Value, cancellationToken);
+            if (creds == null)
+                return NotFound(new { message = "Host não encontrado, display desabilitado ou sem permissão." });
+
+            return Ok(creds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao obter credenciais de display remoto para host {HostId}", id);
+            return StatusCode(500, new { message = "Erro interno.", detail = ex.Message });
+        }
+    }
+
     [HttpPost("tenants/{tenantId:guid}/hosts")]
     public async Task<ActionResult<HostDto>> Create(Guid tenantId, [FromBody] CreateHostDto dto, CancellationToken cancellationToken)
     {

@@ -29,6 +29,17 @@ public class InMemoryDeviceRepository : IDeviceRepository
         }
     }
 
+    public Task<Device?> GetSingleByDevEuiAsync(string normalizedDevEui, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            var matches = _devices
+                .Where(d => d.DevEui.Equals(normalizedDevEui, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return Task.FromResult<Device?>(matches.Count == 1 ? matches[0] : null);
+        }
+    }
+
     public Task<IEnumerable<Device>> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         lock (_lock)

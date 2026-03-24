@@ -31,6 +31,15 @@ public class DeviceRepository : IDeviceRepository
             .FirstOrDefaultAsync(d => d.TenantId == tenantId && d.DevEui == normalized, cancellationToken);
     }
 
+    public async Task<Device?> GetSingleByDevEuiAsync(string normalizedDevEui, CancellationToken cancellationToken = default)
+    {
+        var list = await _context.Devices
+            .Where(d => d.DevEui == normalizedDevEui)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        return list.Count == 1 ? list[0] : null;
+    }
+
     public async Task<IEnumerable<Device>> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         return await _context.Devices

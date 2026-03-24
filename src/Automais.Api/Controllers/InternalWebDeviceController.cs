@@ -27,9 +27,9 @@ public class InternalWebDeviceController : ControllerBase
         _logger = logger;
     }
 
-    [HttpPost("devices/{deviceId:guid}/webdevice/validate-agent")]
+    [HttpPost("devices/{devEui}/webdevice/validate-agent")]
     public async Task<ActionResult<ValidateWebDeviceAgentResponseDto>> ValidateAgent(
-        Guid deviceId,
+        string devEui,
         [FromBody] ValidateWebDeviceAgentRequestDto body,
         CancellationToken cancellationToken)
     {
@@ -44,7 +44,7 @@ public class InternalWebDeviceController : ControllerBase
             return BadRequest(new { message = "Token obrigatório." });
         }
 
-        var result = await _deviceService.ValidateWebDeviceAgentAsync(deviceId, body.Token.Trim(), cancellationToken);
+        var result = await _deviceService.ValidateWebDeviceAgentAsync(devEui, body.Token.Trim(), cancellationToken);
         if (result == null)
         {
             return NotFound(new { message = "Device não encontrado." });
@@ -52,7 +52,7 @@ public class InternalWebDeviceController : ControllerBase
 
         if (!result.Valid)
         {
-            _logger.LogWarning("Validação WebDevice falhou para device {DeviceId}", deviceId);
+            _logger.LogWarning("Validação WebDevice falhou para DevEUI {DevEui}", devEui);
         }
 
         return Ok(result);

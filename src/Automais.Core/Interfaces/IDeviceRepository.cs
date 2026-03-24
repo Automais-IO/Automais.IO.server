@@ -6,6 +6,9 @@ public interface IDeviceRepository
 {
     Task<Device?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Device?> GetByDevEuiAsync(Guid tenantId, string devEui, CancellationToken cancellationToken = default);
+
+    /// <summary>Um device por DevEUI (hex já normalizado). Vários ou nenhum → null.</summary>
+    Task<Device?> GetSingleByDevEuiAsync(string normalizedDevEui, CancellationToken cancellationToken = default);
     Task<IEnumerable<Device>> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<IEnumerable<Device>> GetByApplicationIdAsync(Guid applicationId, CancellationToken cancellationToken = default);
     Task<Device> CreateAsync(Device device, CancellationToken cancellationToken = default);

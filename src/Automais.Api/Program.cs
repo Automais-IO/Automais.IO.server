@@ -1,3 +1,4 @@
+using Automais.Core;
 using Automais.Core.Configuration;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
@@ -1287,13 +1288,20 @@ app.Map("/api/ws/remote/{hostId:guid}", async (HttpContext context, Guid hostId)
     }
 });
 
-// WebSocket agente WebDevice (ESP → API → Python). Query ?token= (token WebDevice em claro).
-app.Map("/api/ws/webdevice/agent/{deviceId:guid}", async (HttpContext context, Guid deviceId) =>
+// WebSocket agente WebDevice (ESP → API → Python). Path = DevEUI (hex). Query ?token= (token WebDevice em claro).
+app.Map("/api/ws/webdevice/agent/{devEui}", async (HttpContext context, string devEui) =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
         context.Response.StatusCode = StatusCodes.Status400BadRequest;
         await context.Response.WriteAsync("Expected WebSocket request");
+        return;
+    }
+
+    if (!DevEuiNormalizer.TryNormalize(devEui, out var normDevEui))
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsJsonAsync(new { message = "DevEUI inválido.", code = "WEBDEVICE_DEVEUI_INVALID" });
         return;
     }
 
@@ -1324,18 +1332,18 @@ app.Map("/api/ws/webdevice/agent/{deviceId:guid}", async (HttpContext context, G
         wsBase = "ws://" + backend;
 
     var upstreamUri = new Uri(
-        $"{wsBase.TrimEnd('/')}/agent/{deviceId:D}?token={Uri.EscapeDataString(token.Trim())}");
+        $"{wsBase.TrimEnd('/')}/agent/{normDevEui}?token={Uri.EscapeDataString(token.Trim())}");
 
     WebSocket? browserSide = null;
     using var upstreamWebSocket = new ClientWebSocket();
     try
     {
         await upstreamWebSocket.ConnectAsync(upstreamUri, context.RequestAborted);
-        logger.LogInformation("Upstream webdevice agent OK device {DeviceId}", deviceId);
+        logger.LogInformation("Upstream webdevice agent OK DevEUI {DevEui}", normDevEui);
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Falha ao conectar webdevice em {Uri} device {DeviceId}", upstreamUri, deviceId);
+        logger.LogError(ex, "Falha ao conectar webdevice em {Uri} DevEUI {DevEui}", upstreamUri, normDevEui);
         context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         await context.Response.WriteAsJsonAsync(new
         {
@@ -1352,7 +1360,7 @@ app.Map("/api/ws/webdevice/agent/{deviceId:guid}", async (HttpContext context, G
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Falha ao aceitar WebSocket do agente WebDevice {DeviceId}", deviceId);
+        logger.LogError(ex, "Falha ao aceitar WebSocket do agente WebDevice {DevEui}", normDevEui);
         return;
     }
 
@@ -1365,7 +1373,7 @@ app.Map("/api/ws/webdevice/agent/{deviceId:guid}", async (HttpContext context, G
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Erro no proxy WebSocket WebDevice agent {DeviceId}", deviceId);
+        logger.LogError(ex, "Erro no proxy WebSocket WebDevice agent {DevEui}", normDevEui);
     }
     finally
     {
@@ -1396,11 +1404,11 @@ app.Map("/api/ws/webdevice/agent/{deviceId:guid}", async (HttpContext context, G
     }
 });
 
-// Proxy HTTP UI do device (browser autenticado JWT) → Python webdevice.
+// Proxy HTTP UI do device (browser autenticado JWT) → Python webdevice. Path = DevEUI do device.
 app.MapMethods(
-    "/api/devices/{deviceId:guid}/web-ui/{**path}",
+    "/api/devices/{devEui}/web-ui/{**path}",
     new[] { "GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS" },
-    async (HttpContext context, Guid deviceId) =>
+    async (HttpContext context, string devEui) =>
     {
         var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
         var authService = context.RequestServices.GetRequiredService<IAuthService>();
@@ -1458,8 +1466,15 @@ app.MapMethods(
             return;
         }
 
-        var device = await deviceRepository.GetByIdAsync(deviceId, context.RequestAborted);
-        if (device == null || device.TenantId != userInfo.TenantId)
+        if (!DevEuiNormalizer.TryNormalize(devEui, out var normUi))
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(new { message = "DevEUI inválido." });
+            return;
+        }
+
+        var device = await deviceRepository.GetByDevEuiAsync(userInfo.TenantId, normUi, context.RequestAborted);
+        if (device == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsJsonAsync(new { message = "Device não encontrado." });
@@ -1474,9 +1489,10 @@ app.MapMethods(
         }
 
         var subPath = context.Request.Path.Value ?? "";
-        var prefix = $"/api/devices/{deviceId:D}/web-ui";
+        var prefix = $"/api/devices/{device.DevEui}/web-ui";
         var rel = "/";
-        if (subPath.Length > prefix.Length && subPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        if (subPath.Length > prefix.Length &&
+            subPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
             rel = subPath[prefix.Length..];
             if (string.IsNullOrEmpty(rel))
@@ -1534,7 +1550,7 @@ app.MapMethods(
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         using var req = new HttpRequestMessage(
             HttpMethod.Post,
-            $"{backendHttp}/internal/proxy/{deviceId:D}");
+            $"{backendHttp}/internal/proxy/{device.DevEui}");
         if (!string.IsNullOrWhiteSpace(internalKey))
             req.Headers.TryAddWithoutValidation("X-Automais-Internal-Key", internalKey.Trim());
         req.Content = new StringContent(proxyJson, Encoding.UTF8, "application/json");
@@ -1546,7 +1562,7 @@ app.MapMethods(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "WebDevice proxy HTTP falhou device {DeviceId}", deviceId);
+            logger.LogError(ex, "WebDevice proxy HTTP falhou DevEUI {DevEui}", device.DevEui);
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsJsonAsync(new
             {

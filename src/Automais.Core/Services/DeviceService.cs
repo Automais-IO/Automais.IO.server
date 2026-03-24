@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Automais.Core;
 using Automais.Core.DTOs;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
@@ -200,11 +201,16 @@ public class DeviceService : IDeviceService
     }
 
     public async Task<ValidateWebDeviceAgentResponseDto?> ValidateWebDeviceAgentAsync(
-        Guid deviceId,
+        string devEui,
         string plainToken,
         CancellationToken cancellationToken = default)
     {
-        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (!DevEuiNormalizer.TryNormalize(devEui, out var norm))
+        {
+            return null;
+        }
+
+        var device = await _deviceRepository.GetSingleByDevEuiAsync(norm, cancellationToken);
         if (device == null)
         {
             return null;

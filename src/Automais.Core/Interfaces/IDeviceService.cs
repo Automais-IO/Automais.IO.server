@@ -11,8 +11,8 @@ public interface IDeviceService
     Task<DeviceDto> UpdateAsync(Guid id, UpdateDeviceDto dto, CancellationToken cancellationToken = default);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 
-    /// <summary>Valida token do agente (serviço webdevice, chave interna).</summary>
-    Task<ValidateWebDeviceAgentResponseDto?> ValidateWebDeviceAgentAsync(Guid deviceId, string plainToken, CancellationToken cancellationToken = default);
+    /// <summary>Valida token do agente (serviço webdevice, chave interna). <paramref name="devEui"/> na rota (hex).</summary>
+    Task<ValidateWebDeviceAgentResponseDto?> ValidateWebDeviceAgentAsync(string devEui, string plainToken, CancellationToken cancellationToken = default);
 
     /// <summary>Ativa WebDevice e emite token em claro (uma vez).</summary>
     Task<WebDeviceTokenIssuedDto> EnableWebDeviceAsync(Guid deviceId, Guid tenantId, CancellationToken cancellationToken = default);

@@ -209,14 +209,21 @@ public class ApplicationDbContext : DbContext
 
             entity.Property(e => e.DevEui)
                 .IsRequired()
-                .HasMaxLength(16);
+                .HasMaxLength(128);
 
             entity.HasIndex(e => new { e.TenantId, e.DevEui })
                 .IsUnique();
 
+            entity.Property(e => e.Kind)
+                .IsRequired()
+                .HasConversion<string>();
+
             entity.Property(e => e.Status)
                 .IsRequired()
                 .HasConversion<string>();
+
+            entity.Property(e => e.WebDeviceEnabled).IsRequired();
+            entity.Property(e => e.WebDeviceTokenHash).HasMaxLength(200);
 
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();

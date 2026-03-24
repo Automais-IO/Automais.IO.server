@@ -1,7 +1,7 @@
+using System.Security.Cryptography;
 using Automais.Core.DTOs;
 using Automais.Core.Entities;
 using Automais.Core.Interfaces;
-
 namespace Automais.Core.Services;
 
 public class DeviceService : IDeviceService
@@ -75,6 +75,7 @@ public class DeviceService : IDeviceService
             Name = dto.Name,
             DevEui = dto.DevEui.ToUpperInvariant(),
             Description = dto.Description,
+            Kind = dto.Kind,
             Status = DeviceStatus.Provisioning,
             VpnNetworkId = vpnNetworkId,
             VpnEnabled = dto.VpnEnabled,
@@ -167,6 +168,20 @@ public class DeviceService : IDeviceService
             device.VpnIpAddress = dto.VpnIpAddress;
         }
 
+        if (dto.Kind.HasValue)
+        {
+            device.Kind = dto.Kind.Value;
+        }
+
+        if (dto.WebDeviceEnabled.HasValue)
+        {
+            device.WebDeviceEnabled = dto.WebDeviceEnabled.Value;
+            if (!device.WebDeviceEnabled)
+            {
+                device.WebDeviceTokenHash = null;
+            }
+        }
+
         device.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _deviceRepository.UpdateAsync(device, cancellationToken);
@@ -182,6 +197,112 @@ public class DeviceService : IDeviceService
         }
 
         await _deviceRepository.DeleteAsync(id, cancellationToken);
+    }
+
+    public async Task<ValidateWebDeviceAgentResponseDto?> ValidateWebDeviceAgentAsync(
+        Guid deviceId,
+        string plainToken,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (device == null)
+        {
+            return null;
+        }
+
+        if (!device.WebDeviceEnabled || string.IsNullOrWhiteSpace(device.WebDeviceTokenHash))
+        {
+            return new ValidateWebDeviceAgentResponseDto
+            {
+                Valid = false,
+                TenantId = device.TenantId,
+                WebDeviceEnabled = device.WebDeviceEnabled
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(plainToken))
+        {
+            return new ValidateWebDeviceAgentResponseDto
+            {
+                Valid = false,
+                TenantId = device.TenantId,
+                WebDeviceEnabled = true
+            };
+        }
+
+        var ok = BCrypt.Net.BCrypt.Verify(plainToken, device.WebDeviceTokenHash);
+        return new ValidateWebDeviceAgentResponseDto
+        {
+            Valid = ok,
+            TenantId = device.TenantId,
+            WebDeviceEnabled = true
+        };
+    }
+
+    public async Task<WebDeviceTokenIssuedDto> EnableWebDeviceAsync(
+        Guid deviceId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (device == null || device.TenantId != tenantId)
+        {
+            throw new KeyNotFoundException($"Device com ID {deviceId} não encontrado.");
+        }
+
+        var plain = GenerateWebDevicePlainToken();
+        device.WebDeviceEnabled = true;
+        device.WebDeviceTokenHash = BCrypt.Net.BCrypt.HashPassword(plain);
+        device.UpdatedAt = DateTime.UtcNow;
+        await _deviceRepository.UpdateAsync(device, cancellationToken);
+        return new WebDeviceTokenIssuedDto { Token = plain };
+    }
+
+    public async Task<WebDeviceTokenIssuedDto> RegenerateWebDeviceTokenAsync(
+        Guid deviceId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (device == null || device.TenantId != tenantId)
+        {
+            throw new KeyNotFoundException($"Device com ID {deviceId} não encontrado.");
+        }
+
+        if (!device.WebDeviceEnabled)
+        {
+            throw new InvalidOperationException("WebDevice não está habilitado para este device.");
+        }
+
+        var plain = GenerateWebDevicePlainToken();
+        device.WebDeviceTokenHash = BCrypt.Net.BCrypt.HashPassword(plain);
+        device.UpdatedAt = DateTime.UtcNow;
+        await _deviceRepository.UpdateAsync(device, cancellationToken);
+        return new WebDeviceTokenIssuedDto { Token = plain };
+    }
+
+    public async Task<DeviceDto> DisableWebDeviceAsync(
+        Guid deviceId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await _deviceRepository.GetByIdAsync(deviceId, cancellationToken);
+        if (device == null || device.TenantId != tenantId)
+        {
+            throw new KeyNotFoundException($"Device com ID {deviceId} não encontrado.");
+        }
+
+        device.WebDeviceEnabled = false;
+        device.WebDeviceTokenHash = null;
+        device.UpdatedAt = DateTime.UtcNow;
+        var updated = await _deviceRepository.UpdateAsync(device, cancellationToken);
+        return await MapToDtoAsync(updated, cancellationToken);
+    }
+
+    private static string GenerateWebDevicePlainToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
     private async Task<IEnumerable<DeviceDto>> MapManyAsync(IEnumerable<Device> devices, CancellationToken cancellationToken)
@@ -216,6 +337,7 @@ public class DeviceService : IDeviceService
             Name = device.Name,
             DevEui = device.DevEui,
             Description = device.Description,
+            Kind = device.Kind,
             Status = device.Status,
             BatteryLevel = device.BatteryLevel,
             SignalStrength = device.SignalStrength,
@@ -230,6 +352,8 @@ public class DeviceService : IDeviceService
                 Name = network.Name,
                 Cidr = network.Cidr
             },
+            WebDeviceEnabled = device.WebDeviceEnabled,
+            WebDeviceTokenConfigured = !string.IsNullOrEmpty(device.WebDeviceTokenHash),
             CreatedAt = device.CreatedAt,
             UpdatedAt = device.UpdatedAt
         };

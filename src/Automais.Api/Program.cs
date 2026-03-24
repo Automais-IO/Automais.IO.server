@@ -1287,6 +1287,346 @@ app.Map("/api/ws/remote/{hostId:guid}", async (HttpContext context, Guid hostId)
     }
 });
 
+// WebSocket agente WebDevice (ESP → API → Python). Query ?token= (token WebDevice em claro).
+app.Map("/api/ws/webdevice/agent/{deviceId:guid}", async (HttpContext context, Guid deviceId) =>
+{
+    if (!context.WebSockets.IsWebSocketRequest)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsync("Expected WebSocket request");
+        return;
+    }
+
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
+    var token = context.Request.Query["token"].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(token))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { message = "Token ausente", code = "WEBDEVICE_TOKEN_MISSING" });
+        return;
+    }
+
+    var backend = configuration["Webdevice:BackendUrl"]?.Trim();
+    if (string.IsNullOrWhiteSpace(backend))
+        backend = "http://127.0.0.1:8768";
+    backend = backend.TrimEnd('/');
+    if (!backend.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+        !backend.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        backend = "http://" + backend;
+
+    string wsBase;
+    if (backend.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        wsBase = "wss://" + backend["https://".Length..];
+    else if (backend.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        wsBase = "ws://" + backend["http://".Length..];
+    else
+        wsBase = "ws://" + backend;
+
+    var upstreamUri = new Uri(
+        $"{wsBase.TrimEnd('/')}/agent/{deviceId:D}?token={Uri.EscapeDataString(token.Trim())}");
+
+    WebSocket? browserSide = null;
+    using var upstreamWebSocket = new ClientWebSocket();
+    try
+    {
+        await upstreamWebSocket.ConnectAsync(upstreamUri, context.RequestAborted);
+        logger.LogInformation("Upstream webdevice agent OK device {DeviceId}", deviceId);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Falha ao conectar webdevice em {Uri} device {DeviceId}", upstreamUri, deviceId);
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = "Serviço WebDevice indisponível.",
+            code = "WEBDEVICE_UPSTREAM_UNAVAILABLE",
+            detail = ex.Message
+        });
+        return;
+    }
+
+    try
+    {
+        browserSide = await context.WebSockets.AcceptWebSocketAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Falha ao aceitar WebSocket do agente WebDevice {DeviceId}", deviceId);
+        return;
+    }
+
+    try
+    {
+        var ct = context.RequestAborted;
+        var t1 = ProxyWebSocketMessages(browserSide, upstreamWebSocket, ct, logger);
+        var t2 = ProxyWebSocketMessages(upstreamWebSocket, browserSide, ct, logger);
+        await Task.WhenAny(t1, t2);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Erro no proxy WebSocket WebDevice agent {DeviceId}", deviceId);
+    }
+    finally
+    {
+        if (upstreamWebSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+        {
+            try
+            {
+                await upstreamWebSocket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    "closed",
+                    CancellationToken.None);
+            }
+            catch { /* ignore */ }
+        }
+
+        if (browserSide != null &&
+            (browserSide.State == WebSocketState.Open || browserSide.State == WebSocketState.CloseReceived))
+        {
+            try
+            {
+                await browserSide.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    "Connection closed",
+                    CancellationToken.None);
+            }
+            catch { /* ignore */ }
+        }
+    }
+});
+
+// Proxy HTTP UI do device (browser autenticado JWT) → Python webdevice.
+app.MapMethods(
+    "/api/devices/{deviceId:guid}/web-ui/{**path}",
+    new[] { "GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS" },
+    async (HttpContext context, Guid deviceId) =>
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        var authService = context.RequestServices.GetRequiredService<IAuthService>();
+        var deviceRepository = context.RequestServices.GetRequiredService<IDeviceRepository>();
+        var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
+
+        if (HttpMethods.IsOptions(context.Request.Method))
+        {
+            context.Response.StatusCode = StatusCodes.Status204NoContent;
+            context.Response.Headers.Append("Allow", "GET, HEAD, POST, PUT, DELETE, OPTIONS");
+            return;
+        }
+
+        var bearerToken = context.Request.Query["access_token"].FirstOrDefault()
+                          ?? context.Request.Query["token"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(bearerToken))
+        {
+            var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                bearerToken = authHeader["Bearer ".Length..].Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(bearerToken))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { message = "Token ausente", code = "UNAUTHORIZED" });
+            return;
+        }
+
+        var (tokenValid, mustChangePassword) =
+            await authService.GetTokenPasswordChangeStateAsync(bearerToken, context.RequestAborted);
+        if (!tokenValid)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { message = "Token inválido ou expirado", code = "UNAUTHORIZED" });
+            return;
+        }
+
+        if (mustChangePassword)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                message = "Defina uma nova senha antes de continuar.",
+                code = "MUST_CHANGE_PASSWORD"
+            });
+            return;
+        }
+
+        var userInfo = await authService.ValidateTokenAsync(bearerToken, context.RequestAborted);
+        if (userInfo == null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsJsonAsync(new { message = "Token inválido", code = "UNAUTHORIZED" });
+            return;
+        }
+
+        var device = await deviceRepository.GetByIdAsync(deviceId, context.RequestAborted);
+        if (device == null || device.TenantId != userInfo.TenantId)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(new { message = "Device não encontrado." });
+            return;
+        }
+
+        if (!device.WebDeviceEnabled)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { message = "WebDevice não habilitado para este device." });
+            return;
+        }
+
+        var subPath = context.Request.Path.Value ?? "";
+        var prefix = $"/api/devices/{deviceId:D}/web-ui";
+        var rel = "/";
+        if (subPath.Length > prefix.Length && subPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            rel = subPath[prefix.Length..];
+            if (string.IsNullOrEmpty(rel))
+                rel = "/";
+            else if (rel[0] != '/')
+                rel = "/" + rel;
+        }
+
+        var query = context.Request.QueryString.HasValue ? context.Request.QueryString.Value!.TrimStart('?') : "";
+
+        var forwardHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in new[]
+                 {
+                     "Accept", "Accept-Language", "Authorization", "Content-Type", "Cookie",
+                     "If-None-Match", "If-Modified-Since", "Origin", "Referer", "User-Agent"
+                 })
+        {
+            var v = context.Request.Headers[name].FirstOrDefault();
+            if (!string.IsNullOrEmpty(v))
+                forwardHeaders[name] = v!;
+        }
+
+        string? bodyB64 = null;
+        if (context.Request.ContentLength is > 0 or null &&
+            (HttpMethods.IsPost(context.Request.Method) ||
+             HttpMethods.IsPut(context.Request.Method) ||
+             HttpMethods.IsDelete(context.Request.Method)))
+        {
+            await using var ms = new MemoryStream();
+            await context.Request.Body.CopyToAsync(ms, context.RequestAborted);
+            var buf = ms.ToArray();
+            if (buf.Length > 0)
+                bodyB64 = Convert.ToBase64String(buf);
+        }
+
+        var backendHttp = configuration["Webdevice:BackendUrl"]?.Trim();
+        if (string.IsNullOrWhiteSpace(backendHttp))
+            backendHttp = "http://127.0.0.1:8768";
+        backendHttp = backendHttp.TrimEnd('/');
+
+        var internalKey = configuration["InternalApiKey"]
+                          ?? configuration["Automais:InternalApiKey"]
+                          ?? Environment.GetEnvironmentVariable("AUTOMAIS_INTERNAL_API_KEY");
+
+        var proxyDict = new Dictionary<string, object?>
+        {
+            ["method"] = context.Request.Method,
+            ["path"] = rel,
+            ["query"] = query,
+            ["headers"] = forwardHeaders,
+            ["body_base64"] = bodyB64
+        };
+        var proxyJson = JsonSerializer.Serialize(proxyDict);
+
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        using var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{backendHttp}/internal/proxy/{deviceId:D}");
+        if (!string.IsNullOrWhiteSpace(internalKey))
+            req.Headers.TryAddWithoutValidation("X-Automais-Internal-Key", internalKey.Trim());
+        req.Content = new StringContent(proxyJson, Encoding.UTF8, "application/json");
+
+        HttpResponseMessage pyRes;
+        try
+        {
+            pyRes = await httpClient.SendAsync(req, context.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "WebDevice proxy HTTP falhou device {DeviceId}", deviceId);
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                message = "Serviço WebDevice indisponível.",
+                code = "WEBDEVICE_PROXY_UNAVAILABLE"
+            });
+            return;
+        }
+
+        var json = await pyRes.Content.ReadAsStringAsync(context.RequestAborted);
+        if (!pyRes.IsSuccessStatusCode)
+        {
+            context.Response.StatusCode = (int)pyRes.StatusCode;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            await context.Response.WriteAsync(json, context.RequestAborted);
+            return;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var status = root.TryGetProperty("status", out var st) ? st.GetInt32() : 502;
+        byte[] bodyBytes = Array.Empty<byte>();
+        if (root.TryGetProperty("body_base64", out var b64El) && b64El.ValueKind == JsonValueKind.String)
+        {
+            var s = b64El.GetString();
+            if (!string.IsNullOrEmpty(s))
+                bodyBytes = Convert.FromBase64String(s);
+        }
+
+        context.Response.StatusCode = status;
+
+        string? respContentType = null;
+        if (root.TryGetProperty("headers", out var hdrs) && hdrs.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var p in hdrs.EnumerateObject())
+            {
+                if (p.Value.ValueKind != JsonValueKind.String)
+                    continue;
+                var key = p.Name;
+                if (key.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                {
+                    respContentType = p.Value.GetString();
+                    continue;
+                }
+
+                context.Response.Headers[key] = p.Value.GetString();
+            }
+        }
+
+        if (!string.IsNullOrEmpty(respContentType))
+            context.Response.ContentType = respContentType;
+
+        var contentType = respContentType ?? "application/octet-stream";
+        if (contentType.Contains("text/html", StringComparison.OrdinalIgnoreCase) &&
+            bodyBytes.Length > 0)
+        {
+            var html = Encoding.UTF8.GetString(bodyBytes);
+            var baseHref = $"{prefix}/";
+            if (!html.Contains("<base ", StringComparison.OrdinalIgnoreCase))
+            {
+                var injected = $"<base href=\"{baseHref}\">";
+                var idx = html.IndexOf("<head", StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    var gt = html.IndexOf('>', idx);
+                    if (gt > idx)
+                    {
+                        html = html.Insert(gt + 1, injected);
+                        bodyBytes = Encoding.UTF8.GetBytes(html);
+                    }
+                }
+            }
+        }
+
+        context.Response.ContentLength = bodyBytes.Length;
+        await context.Response.Body.WriteAsync(bodyBytes, context.RequestAborted);
+    });
+
 // Authorization (opcional para SignalR, mas necessário para APIs)
 app.UseAuthorization();
 

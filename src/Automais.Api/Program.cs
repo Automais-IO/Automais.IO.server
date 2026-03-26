@@ -1422,6 +1422,12 @@ app.MapMethods(
             return;
         }
 
+        // Esta rota precisa ser embutível no frontend (iframe) para WebDevice.
+        // Mantemos o escopo restrito aos domínios oficiais do painel.
+        context.Response.Headers.Remove("X-Frame-Options");
+        context.Response.Headers["Content-Security-Policy"] =
+            "frame-ancestors 'self' https://automais.io https://www.automais.io";
+
         var bearerToken = context.Request.Query["access_token"].FirstOrDefault()
                           ?? context.Request.Query["token"].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(bearerToken))
@@ -1433,6 +1439,7 @@ app.MapMethods(
 
         if (string.IsNullOrWhiteSpace(bearerToken))
         {
+            logger.LogWarning("WebUI proxy: token ausente DevEUI {DevEui} Path {Path}", devEui, context.Request.Path);
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsJsonAsync(new { message = "Token ausente", code = "UNAUTHORIZED" });
             return;
@@ -1442,6 +1449,7 @@ app.MapMethods(
             await authService.GetTokenPasswordChangeStateAsync(bearerToken, context.RequestAborted);
         if (!tokenValid)
         {
+            logger.LogWarning("WebUI proxy: token inválido/expirado DevEUI {DevEui}", devEui);
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsJsonAsync(new { message = "Token inválido ou expirado", code = "UNAUTHORIZED" });
             return;
@@ -1449,6 +1457,7 @@ app.MapMethods(
 
         if (mustChangePassword)
         {
+            logger.LogWarning("WebUI proxy: MUST_CHANGE_PASSWORD DevEUI {DevEui}", devEui);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new
             {
@@ -1461,6 +1470,7 @@ app.MapMethods(
         var userInfo = await authService.ValidateTokenAsync(bearerToken, context.RequestAborted);
         if (userInfo == null)
         {
+            logger.LogWarning("WebUI proxy: ValidateToken retornou nulo DevEUI {DevEui}", devEui);
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsJsonAsync(new { message = "Token inválido", code = "UNAUTHORIZED" });
             return;
@@ -1468,6 +1478,7 @@ app.MapMethods(
 
         if (!DevEuiNormalizer.TryNormalize(devEui, out var normUi))
         {
+            logger.LogWarning("WebUI proxy: DevEUI inválido recebido {DevEui}", devEui);
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { message = "DevEUI inválido." });
             return;
@@ -1476,6 +1487,8 @@ app.MapMethods(
         var device = await deviceRepository.GetByDevEuiAsync(userInfo.TenantId, normUi, context.RequestAborted);
         if (device == null)
         {
+            logger.LogWarning("WebUI proxy: device não encontrado tenant {TenantId} DevEUI {DevEui}",
+                userInfo.TenantId, normUi);
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsJsonAsync(new { message = "Device não encontrado." });
             return;
@@ -1483,6 +1496,8 @@ app.MapMethods(
 
         if (!device.WebDeviceEnabled)
         {
+            logger.LogWarning("WebUI proxy: WebDevice desabilitado tenant {TenantId} DevEUI {DevEui}",
+                userInfo.TenantId, device.DevEui);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new { message = "WebDevice não habilitado para este device." });
             return;

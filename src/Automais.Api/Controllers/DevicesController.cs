@@ -93,8 +93,21 @@ public class DevicesController : ControllerBase
     [HttpDelete("devices/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        await _deviceService.DeleteAsync(id, cancellationToken);
-        return NoContent();
+        try
+        {
+            await _deviceService.DeleteAsync(id, cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Device não encontrado para exclusão");
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Não foi possível excluir device {DeviceId}", id);
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }
 

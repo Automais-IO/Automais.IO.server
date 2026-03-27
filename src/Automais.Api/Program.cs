@@ -1550,7 +1550,8 @@ app.MapMethods(
 
         var internalKey = configuration["InternalApiKey"]
                           ?? configuration["Automais:InternalApiKey"]
-                          ?? Environment.GetEnvironmentVariable("AUTOMAIS_INTERNAL_API_KEY");
+                          ?? Environment.GetEnvironmentVariable("AUTOMAIS_INTERNAL_API_KEY")
+                          ?? Environment.GetEnvironmentVariable("AUTOMAIS_SERVER_API_KEY");
 
         var proxyDict = new Dictionary<string, object?>
         {

@@ -18,6 +18,9 @@ TimeoutStartSec=300
 TimeoutStopSec=60
 TimeoutAbortSec=30
 
+# Mesmo arquivo que hosts/remote/routeros/vpnserver/webdevice/manager (AUTOMAIS_*, API_C_SHARP_URL, etc.)
+EnvironmentFile=-/root/automais.io/automais.io.env
+
 # Variáveis de ambiente - IMPORTANTE: cada variável em uma linha separada
 Environment="ASPNETCORE_ENVIRONMENT=Production"
 Environment="ASPNETCORE_URLS=http://0.0.0.0:5000"
@@ -44,7 +47,7 @@ Environment="SMTP_HOST=smtp.office365.com"
 Environment="SMTP_PORT=587"
 Environment="SMTP_USERNAME=noreply@automais.io"
 Environment="SMTP_USE_SSL=true"
-Environment="AUTOMAIS_SERVER_API_KEY=eob4CuvEdZM7qH+RLME6+vc/JjPblIWhUbC1lvTKWYw="
+# AUTOMAIS_INTERNAL_API_KEY / AUTOMAIS_SERVER_API_KEY: usar docs/automais.io.env → /root/automais.io/automais.io.env (acima)
 
 [Install]
 WantedBy=multi-user.target
